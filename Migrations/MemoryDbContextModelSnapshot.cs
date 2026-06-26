@@ -31,6 +31,10 @@ namespace MemoryMCP.Migrations
                     b.Property<Guid?>("MergedIntoEntityId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Ref")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(512)
@@ -52,6 +56,10 @@ namespace MemoryMCP.Migrations
                     b.HasIndex("MergedIntoEntityId");
 
                     b.HasIndex("Name");
+
+                    b.HasIndex("Ref")
+                        .IsUnique()
+                        .HasFilter("[Ref] IS NOT NULL");
 
                     b.HasIndex("Status");
 
@@ -173,6 +181,10 @@ namespace MemoryMCP.Migrations
                         .HasMaxLength(8000)
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Ref")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -194,6 +206,10 @@ namespace MemoryMCP.Migrations
                     b.HasIndex("Created");
 
                     b.HasIndex("MemoryFrom");
+
+                    b.HasIndex("Ref")
+                        .IsUnique()
+                        .HasFilter("[Ref] IS NOT NULL");
 
                     b.HasIndex("Status");
 
@@ -317,6 +333,10 @@ namespace MemoryMCP.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<string>("Ref")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
                     b.Property<string>("SearchValue")
                         .IsRequired()
                         .HasMaxLength(512)
@@ -353,6 +373,10 @@ namespace MemoryMCP.Migrations
                     b.HasIndex("Property", "StringValue");
 
                     b.HasIndex("Property", "Type", "SearchValue");
+
+                    b.HasIndex("Ref")
+                        .IsUnique()
+                        .HasFilter("[Ref] IS NOT NULL");
 
                     b.HasIndex("Status");
 

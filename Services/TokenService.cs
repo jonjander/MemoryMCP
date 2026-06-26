@@ -412,6 +412,7 @@ public class TokenService(MemoryDbContext db)
             {
                 var tokenEntries = g
                     .Select(t => new TokenUsageEntryDto(
+                        t.Ref ?? string.Empty,
                         t.Id,
                         TokenValueHelper.FormatDisplayValue(t),
                         t.Type,

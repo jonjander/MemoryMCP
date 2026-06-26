@@ -30,8 +30,7 @@ public static class TokenValueHelper
         };
     }
 
-    public static TokenSummaryDto ToSummary(Token token) =>
-        new(token.Id, token.Property, token.Type, FormatDisplayValue(token), token.Confidence, token.Source, token.Status, token.SupersedesTokenId, token.SupersededByTokenId);
+    public static TokenSummaryDto ToSummary(Token token) => ModelMappers.ToSummary(token);
 
     public static void ApplyValues(Token token, PropertyType type, int? intValue, bool? boolValue, string? stringValue, float? floatValue, DateTime? dateTimeValue)
     {

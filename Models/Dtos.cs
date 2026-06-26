@@ -1,6 +1,7 @@
 namespace MemoryMCP.Models;
 
 public record MemoryDetailDto(
+    string Ref,
     Guid Id,
     string Raw,
     DateTime Created,
@@ -18,6 +19,7 @@ public record MemoryDetailDto(
     MemorySummaryDto? SupersededByMemory);
 
 public record MemorySummaryDto(
+    string Ref,
     Guid Id,
     string Raw,
     DateTime Created,
@@ -50,6 +52,7 @@ public record ReviseMemoryResultDto(
     MemorySummaryDto Successor);
 
 public record EntitySummaryDto(
+    string Ref,
     Guid Id,
     string Type,
     string Name,
@@ -58,6 +61,7 @@ public record EntitySummaryDto(
     Guid? MergedIntoEntityId = null);
 
 public record EntityDetailDto(
+    string Ref,
     Guid Id,
     string Type,
     string Name,
@@ -96,6 +100,7 @@ public record MergeEntitiesResultDto(
     int RelationshipsMoved);
 
 public record TokenSummaryDto(
+    string Ref,
     Guid Id,
     string Property,
     PropertyType Type,
@@ -154,6 +159,7 @@ public record PropertyCatalogEntryDto(
     IReadOnlyList<string> SampleValues);
 
 public record TokenUsageEntryDto(
+    string Ref,
     Guid Id,
     string DisplayValue,
     PropertyType Type,
@@ -239,8 +245,11 @@ public record StoreMemoryBundleInput(
     bool ReuseTokens = true);
 
 public record StoreMemoryBundleResult(
+    string MemoryRef,
     Guid MemoryId,
+    IReadOnlyDictionary<string, string> EntityRefs,
     IReadOnlyDictionary<string, Guid> EntityIds,
+    IReadOnlyList<string> TokenRefs,
     IReadOnlyList<Guid> TokenIds,
     IReadOnlyList<Guid> RelationshipIds);
 
@@ -253,17 +262,23 @@ public record StoreMemoryBundlesResult(
     IReadOnlyList<StoreMemoryBundleBatchItemResult> Results);
 
 public record MemoryTokenLinkInput(
-    Guid MemoryId,
-    Guid TokenId);
+    string MemoryId,
+    string TokenId);
 
 public record LinkMemoryTokensResult(
     int Requested,
     int Linked,
     int Skipped,
-    IReadOnlyList<MemoryTokenLinkInput> Links);
+    IReadOnlyList<MemoryTokenLinkResolved> Links);
+
+public record MemoryTokenLinkResolved(
+    string MemoryRef,
+    Guid MemoryId,
+    string TokenRef,
+    Guid TokenId);
 
 public record CreateAndLinkTokenInput(
-    Guid MemoryId,
+    string MemoryId,
     string Property,
     PropertyType Type,
     int? IntValue = null,
@@ -276,7 +291,9 @@ public record CreateAndLinkTokenInput(
     bool ReuseToken = true);
 
 public record CreateAndLinkTokenResultItem(
+    string MemoryRef,
     Guid MemoryId,
+    string TokenRef,
     Guid TokenId,
     TokenSummaryDto Token);
 

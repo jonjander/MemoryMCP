@@ -1,8 +1,11 @@
 namespace MemoryMCP;
 
-public class Token
+public class Token : IHasRef
 {
     public Guid Id { get; set; }
+
+    /// <summary>Short Base64url alias for agent-facing APIs (8 chars). Guid remains internal PK.</summary>
+    public string? Ref { get; set; }
 
     public DateTime Created { get; set; }
 

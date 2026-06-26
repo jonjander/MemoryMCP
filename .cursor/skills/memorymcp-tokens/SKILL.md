@@ -2,11 +2,39 @@
 name: memorymcp-tokens
 description: >-
   Store and maintain abstract token properties in MemoryMCP for cross-memory mesh
-  search. Use when storing memories, extracting facts, listing properties, renaming
-  overly specific properties, merging vocabulary, or splitting compound token values.
+  search. Prefer Ref ids (8-char) over Guid in follow-up calls; Guid still works.
+  Use when the user asks to save ('spara i minnet', 'kom ihåg'), confirms they want
+  a fact stored, or when retrieving/querying memory. Also for listing properties,
+  renaming overly specific properties, merging vocabulary, or splitting compound token values.
 ---
 
 # MemoryMCP token properties
+
+## Ref ids (primary — Guid backward compatible)
+
+Every entity, memory, and token has **Ref** (8-char Base64, **preferred**) and **Id** (Guid, still accepted in all id parameters).
+
+| When | What to do |
+|------|------------|
+| After `store_memory_bundle` | Use `memoryRef`, `entityRefs`, `tokenRefs` |
+| After `find_entities` / search | Cache **Ref** from each item |
+| Follow-up tool calls | Pass Ref — not Guid — in `id`, `memoryId`, `entityId`, `tokenId` |
+| Batch JSON | `"memoryId":"aB3-xY9z"` — Ref or Guid both work |
+
+Never ask the user for ids. Do not repeat Guid in reasoning when Ref is available. See `get_memorymcp_guide(topic="refs")`.
+
+## When to use memory (before tokens)
+
+| Situation | Action |
+|-----------|--------|
+| Direct save order: "spara i minnet", "kom ihåg det här" | `store_memory_bundle` immediately |
+| Relevant fact, no save request | Ask once: "Vill du att jag ska lägga detta i minnet?" |
+| User asks to recall, or task needs prior context | `search_*` — no permission needed |
+| Casual chat, nothing worth keeping | Do not use memory tools |
+
+Once saving: extract entities and tokens — never ask "ska jag skapa en entitet?".
+
+Call MCP tool `start_here` if unsure.
 
 Tokens are **abstract search facets** — a mesh layer connecting unrelated memories and entities. They are not a fixed schema; vocabulary emerges as you store and retrieve.
 
@@ -144,8 +172,8 @@ merge_token_properties(
 When one token holds multiple values:
 
 ```
-split_token_value(tokenId="...", targetProperty="Likes", preview=true)
-split_token_value(tokenId="...", targetProperty="Likes")
+split_token_value(tokenId="<Ref from list_tokens_by_property>", targetProperty="Likes", preview=true)
+split_token_value(tokenId="<Ref>", targetProperty="Likes")
 ```
 
 ### 4. Fix at store time
@@ -172,6 +200,6 @@ Merging duplicate tokens (same property+type+value) helps mesh search **only whe
 | `merge_token_properties` | Rename several properties into one canonical name |
 | `split_token_value` | Split `a, b, c` string into separate atomic tokens |
 | `find_tokens` / `search_memories_by_token` / `search_entities_by_token` | Query the mesh |
-| `store_memory_bundle` | Store raw + entities + abstract tokens |
+| `store_memory_bundle` | Store raw + entities + tokens; response has `memoryRef`, `entityRefs`, `tokenRefs` |
 
-Always use `preview=true` first when unsure about impact.
+Always use `preview=true` first when unsure about impact. Prefer **Ref** over Guid in all follow-up id parameters.

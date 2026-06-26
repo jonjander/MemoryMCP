@@ -7,7 +7,7 @@ using ModelContextProtocol.Server;
 namespace MemoryMCP.Tools;
 
 [McpServerToolType]
-public class TokenTools(TokenService tokenService, MemoryStoreService memoryStore)
+public class TokenTools(TokenService tokenService, MemoryStoreService memoryStore, RefIdResolver refResolver)
 {
     [McpServerTool, Description(TokenPropertyGuidance.CreateTokenDescription)]
     public async Task<string> CreateToken(
@@ -28,7 +28,7 @@ public class TokenTools(TokenService tokenService, MemoryStoreService memoryStor
 
     [McpServerTool, Description("Update a token in place. Affects all linked memories. Recalculates SearchValue automatically.")]
     public async Task<string> UpdateToken(
-        Guid id,
+        [Description(RefIdResolver.IdOrRefDescription)] string id,
         [Description(TokenPropertyGuidance.PropertyParameter)] string? property = null,
         PropertyType? type = null,
         int? intValue = null,
@@ -41,13 +41,14 @@ public class TokenTools(TokenService tokenService, MemoryStoreService memoryStor
         string? note = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await tokenService.UpdateTokenAsync(id, property, type, intValue, boolValue, stringValue, floatValue, dateTimeValue, confidence, source, note, cancellationToken);
+        var tokenId = await refResolver.ResolveTokenIdAsync(id, cancellationToken);
+        var result = await tokenService.UpdateTokenAsync(tokenId, property, type, intValue, boolValue, stringValue, floatValue, dateTimeValue, confidence, source, note, cancellationToken);
         return JsonResult.Ok(result);
     }
 
     [McpServerTool, Description("Create a corrected successor token and relink memories. Original preserved when all links move.")]
     public async Task<string> SupersedeToken(
-        Guid originalTokenId,
+        [Description(RefIdResolver.IdOrRefDescription)] string originalTokenId,
         [Description(TokenPropertyGuidance.PropertyParameter)] string? property = null,
         PropertyType? type = null,
         int? intValue = null,
@@ -57,32 +58,40 @@ public class TokenTools(TokenService tokenService, MemoryStoreService memoryStor
         DateTime? dateTimeValue = null,
         float? confidence = null,
         TokenSource? source = null,
-        [Description("Relink only this memory. Omit to relink all linked memories.")] Guid? memoryId = null,
+        [Description("Relink only this memory. Omit to relink all linked memories.")] string? memoryId = null,
         string? note = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await tokenService.SupersedeTokenAsync(originalTokenId, property, type, intValue, boolValue, stringValue, floatValue, dateTimeValue, confidence, source, memoryId, note, cancellationToken);
+        var resolvedTokenId = await refResolver.ResolveTokenIdAsync(originalTokenId, cancellationToken);
+        Guid? resolvedMemoryId = null;
+        if (!string.IsNullOrWhiteSpace(memoryId))
+            resolvedMemoryId = await refResolver.ResolveMemoryIdAsync(memoryId, cancellationToken);
+
+        var result = await tokenService.SupersedeTokenAsync(resolvedTokenId, property, type, intValue, boolValue, stringValue, floatValue, dateTimeValue, confidence, source, resolvedMemoryId, note, cancellationToken);
         return JsonResult.Ok(result);
     }
 
     [McpServerTool, Description("Mark a token as deprecated without deleting it.")]
     public async Task<string> DeprecateToken(
-        Guid id,
+        [Description(RefIdResolver.IdOrRefDescription)] string id,
         string? note = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await tokenService.DeprecateTokenAsync(id, note, cancellationToken);
+        var tokenId = await refResolver.ResolveTokenIdAsync(id, cancellationToken);
+        var result = await tokenService.DeprecateTokenAsync(tokenId, note, cancellationToken);
         return JsonResult.Ok(result);
     }
 
     [McpServerTool, Description("Link a token to a memory.")]
     public async Task<string> LinkMemoryToken(
-        Guid memoryId,
-        Guid tokenId,
+        [Description(RefIdResolver.IdOrRefDescription)] string memoryId,
+        [Description(RefIdResolver.IdOrRefDescription)] string tokenId,
         CancellationToken cancellationToken = default)
     {
-        await memoryStore.LinkMemoryTokenAsync(memoryId, tokenId, cancellationToken);
-        return JsonResult.Ok(new { memoryId, tokenId, linked = true });
+        var resolvedMemoryId = await refResolver.ResolveMemoryIdAsync(memoryId, cancellationToken);
+        var resolvedTokenId = await refResolver.ResolveTokenIdAsync(tokenId, cancellationToken);
+        await memoryStore.LinkMemoryTokenAsync(resolvedMemoryId, resolvedTokenId, cancellationToken);
+        return JsonResult.Ok(new { memoryId = resolvedMemoryId, tokenId = resolvedTokenId, linked = true });
     }
 
     [McpServerTool, Description(
@@ -90,7 +99,7 @@ public class TokenTools(TokenService tokenService, MemoryStoreService memoryStor
         "Use when tokens already exist and you need to attach them to several memories. " +
         "Skips links that already exist.")]
     public async Task<string> LinkMemoryTokens(
-        [Description("JSON array: [{\"memoryId\":\"...\",\"tokenId\":\"...\"}, ...]")] string linksJson,
+        [Description("JSON array: [{\"memoryId\":\"RefOrGuid\",\"tokenId\":\"RefOrGuid\"}, ...]")] string linksJson,
         CancellationToken cancellationToken = default)
     {
         var links = McpJson.DeserializeList<MemoryTokenLinkInput>(linksJson, "linksJson");
@@ -103,7 +112,7 @@ public class TokenTools(TokenService tokenService, MemoryStoreService memoryStor
         "Use when appending structured facts to existing memories without separate create_token + link_memory_token calls. " +
         TokenPropertyGuidance.CreateTokenDescription)]
     public async Task<string> CreateAndLinkTokens(
-        [Description("JSON array. Each item: {\"memoryId\":\"...\",\"property\":\"Year\",\"type\":\"Int\",\"intValue\":1988,\"confidence\":0.95,\"source\":\"Extracted\",\"reuseToken\":true}")] string tokensJson,
+        [Description("JSON array. Each item: {\"memoryId\":\"RefOrGuid\",\"property\":\"Year\",\"type\":\"Int\",\"intValue\":1988,\"confidence\":0.95,\"source\":\"Extracted\",\"reuseToken\":true}")] string tokensJson,
         CancellationToken cancellationToken = default)
     {
         var items = McpJson.DeserializeList<CreateAndLinkTokenInput>(tokensJson, "tokensJson");
@@ -113,29 +122,33 @@ public class TokenTools(TokenService tokenService, MemoryStoreService memoryStor
 
     [McpServerTool, Description("Remove the link between a memory and a token.")]
     public async Task<string> UnlinkMemoryToken(
-        Guid memoryId,
-        Guid tokenId,
+        [Description(RefIdResolver.IdOrRefDescription)] string memoryId,
+        [Description(RefIdResolver.IdOrRefDescription)] string tokenId,
         CancellationToken cancellationToken = default)
     {
-        await memoryStore.UnlinkMemoryTokenAsync(memoryId, tokenId, cancellationToken);
-        return JsonResult.Ok(new { memoryId, tokenId, linked = false });
+        var resolvedMemoryId = await refResolver.ResolveMemoryIdAsync(memoryId, cancellationToken);
+        var resolvedTokenId = await refResolver.ResolveTokenIdAsync(tokenId, cancellationToken);
+        await memoryStore.UnlinkMemoryTokenAsync(resolvedMemoryId, resolvedTokenId, cancellationToken);
+        return JsonResult.Ok(new { memoryId = resolvedMemoryId, tokenId = resolvedTokenId, linked = false });
     }
 
     [McpServerTool, Description("Get a token with linked memory ids and revision history.")]
     public async Task<string> GetToken(
-        Guid id,
+        [Description(RefIdResolver.IdOrRefDescription)] string id,
         CancellationToken cancellationToken = default)
     {
-        var result = await tokenService.GetTokenAsync(id, cancellationToken);
+        var tokenId = await refResolver.ResolveTokenIdAsync(id, cancellationToken);
+        var result = await tokenService.GetTokenAsync(tokenId, cancellationToken);
         return result is null ? JsonResult.Ok(new { error = "Token not found." }) : JsonResult.Ok(result);
     }
 
     [McpServerTool, Description("Get revision audit log and correction chain for a token.")]
     public async Task<string> GetTokenHistory(
-        Guid id,
+        [Description(RefIdResolver.IdOrRefDescription)] string id,
         CancellationToken cancellationToken = default)
     {
-        var result = await tokenService.GetTokenHistoryAsync(id, cancellationToken);
+        var tokenId = await refResolver.ResolveTokenIdAsync(id, cancellationToken);
+        var result = await tokenService.GetTokenHistoryAsync(tokenId, cancellationToken);
         return result is null ? JsonResult.Ok(new { error = "Token not found." }) : JsonResult.Ok(result);
     }
 
@@ -206,14 +219,15 @@ public class TokenTools(TokenService tokenService, MemoryStoreService memoryStor
 
     [McpServerTool, Description(TokenPropertyGuidance.SplitTokenDescription)]
     public async Task<string> SplitTokenValue(
-        Guid tokenId,
+        [Description(RefIdResolver.IdOrRefDescription)] string tokenId,
         [Description("Abstract property for each split part, e.g. Likes.")] string targetProperty,
         [Description("Delimiter between values in the original string. Default comma.")] string delimiter = ",",
         string? note = null,
         bool preview = false,
         CancellationToken cancellationToken = default)
     {
-        var result = await tokenService.SplitTokenValueAsync(tokenId, targetProperty, delimiter, note, preview, cancellationToken);
+        var resolvedTokenId = await refResolver.ResolveTokenIdAsync(tokenId, cancellationToken);
+        var result = await tokenService.SplitTokenValueAsync(resolvedTokenId, targetProperty, delimiter, note, preview, cancellationToken);
         return JsonResult.Ok(result);
     }
 }

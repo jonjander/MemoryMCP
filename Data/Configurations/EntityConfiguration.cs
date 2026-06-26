@@ -11,6 +11,8 @@ public class EntityConfiguration : IEntityTypeConfiguration<Entity>
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Type).IsRequired().HasMaxLength(128);
         builder.Property(e => e.Name).IsRequired().HasMaxLength(512);
+        builder.Property(e => e.Ref).HasMaxLength(RefIdGenerator.CharLength);
+        builder.HasIndex(e => e.Ref).IsUnique().HasFilter("[Ref] IS NOT NULL");
         builder.HasIndex(e => e.Name);
         builder.HasIndex(e => e.Type);
         builder.HasIndex(e => e.Status);

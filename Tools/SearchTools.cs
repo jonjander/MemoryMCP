@@ -17,9 +17,9 @@ public class SearchTools(SearchService searchService)
         return JsonResult.Ok(result);
     }
 
-    [McpServerTool, Description("Search memories linked to an entity by id or name.")]
+    [McpServerTool, Description("Search memories linked to an entity by Ref id, Guid, or name.")]
     public async Task<string> SearchMemoriesByEntity(
-        Guid? entityId = null,
+        [Description(RefIdResolver.IdOrRefDescription + " Omit if using entityName.")] string? entityId = null,
         string? entityName = null,
         bool includeInactive = false,
         CancellationToken cancellationToken = default)

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoryMCP.Services;
 
-public class SearchService(MemoryDbContext db)
+public class SearchService(MemoryDbContext db, RefIdResolver refResolver)
 {
     public async Task<IReadOnlyList<MemorySummaryDto>> SearchMemoriesByTextAsync(
         string query,
@@ -59,15 +59,18 @@ public class SearchService(MemoryDbContext db)
     }
 
     public async Task<IReadOnlyList<MemorySummaryDto>> SearchMemoriesByEntityAsync(
-        Guid? entityId = null,
+        string? entityId = null,
         string? entityName = null,
         bool includeInactive = false,
         CancellationToken cancellationToken = default)
     {
         IQueryable<MemoryEntity> query = db.MemoryEntities.AsNoTracking();
 
-        if (entityId.HasValue)
-            query = query.Where(me => me.EntityId == entityId.Value);
+        if (!string.IsNullOrWhiteSpace(entityId))
+        {
+            var resolvedId = await refResolver.ResolveEntityIdAsync(entityId, cancellationToken);
+            query = query.Where(me => me.EntityId == resolvedId);
+        }
         else if (!string.IsNullOrWhiteSpace(entityName))
             query = query.Where(me => me.Entity.Name.Contains(entityName) && me.Entity.Status == EntityStatus.Active);
         else
@@ -163,7 +166,7 @@ public class SearchService(MemoryDbContext db)
             .Where(me => me.Entity.Status == EntityStatus.Active)
             .Select(me => me.Entity)
             .Distinct()
-            .Select(e => new EntitySummaryDto(e.Id, e.Type, e.Name, e.Memories.Count, e.Status, e.MergedIntoEntityId))
+            .Select(e => ModelMappers.ToSummary(e, e.Memories.Count))
             .OrderBy(e => e.Name)
             .Take(100)
             .ToListAsync(cancellationToken);
@@ -171,13 +174,5 @@ public class SearchService(MemoryDbContext db)
         return entities;
     }
 
-    private static MemorySummaryDto ToSummary(Memory memory) =>
-        new(
-            memory.Id,
-            memory.Raw,
-            memory.Created,
-            memory.MemoryFrom,
-            memory.Status,
-            memory.SupersedesMemoryId,
-            memory.SupersededByMemoryId);
+    private static MemorySummaryDto ToSummary(Memory memory) => ModelMappers.ToSummary(memory);
 }
