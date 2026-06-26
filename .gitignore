@@ -1,0 +1,57 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+[Bb]uild/
+[Bb]uilds/
+out/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# .NET
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+*.nuget.props
+*.nuget.targets
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+# Logs
+[Ll]og/
+[Ll]ogs/
+*.log
+
+# Local overrides only — appsettings.json is tracked in git
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.local.json
+secrets.json
+.env
+.env.*
+
+# Local MCP / Cursor overrides (keep shared skills under .cursor/skills/)
+.cursor/mcp.json
+
+# Exported memory bundles (local data)
+bundle-*.json
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
