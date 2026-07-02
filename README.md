@@ -135,7 +135,7 @@ Keep `memorymcp` only in the global config if you already use that for other ser
    Or manually: `dotnet build MemoryMCP.csproj -o bin/mcp`
 3. Turn on / restart `memorymcp` in Cursor
 
-Verify tool count (should be **42**):
+Verify tool count (should be **43**):
 ```powershell
 dotnet exec bin/mcp/MemoryMCP.dll -- --list-tools
 ```
@@ -144,24 +144,30 @@ If `dotnet build` fails with "file is locked by MemoryMCP", Cursor is still runn
 
 ## Agent guidance
 
-New agents should not guess tool order. MemoryMCP exposes guidance in three ways:
+New agents should not guess tool order. MemoryMCP exposes guidance in four ways:
 
 1. **Server instructions** — sent automatically when the MCP session starts (workflow summary).
-2. **`get_memorymcp_guide`** — call with optional `topic`: `overview`, `quickstart`, `store`, `retrieve`, `tokens`, `maintenance`, `examples`.
-3. **MCP resources** (markdown): `memorymcp://guide/workflow`, `memorymcp://guide/tokens`, `memorymcp://guide/examples`.
+2. **`start_here`** — call first: when to save vs ask, when to retrieve, store examples, token rules.
+3. **`get_memorymcp_guide`** — topics include `start_here`, `refs`, `store`, `retrieve`, `tokens`, …
+4. **MCP resources** (markdown): `memorymcp://guide/start`, `memorymcp://guide/refs`, `memorymcp://guide/workflow`, `memorymcp://guide/tokens`, `memorymcp://guide/examples`.
 
 `store_memory_bundle` and `create_memory` responses include a `nextSteps` array with suggested follow-up actions.
 
-See `.cursor/skills/memorymcp-tokens/SKILL.md` for extended Cursor skill guidance.
+### Ref ids (agent-facing)
+
+Entities, memories, and tokens expose **Ref** (8-char Base64, **primary**) and **Id** (Guid, backward compatible). All id tool parameters accept either — **prefer Ref** to save context. After `store_memory_bundle`, use `memoryRef` / `entityRefs` / `tokenRefs`. See `get_memorymcp_guide(topic="refs")`.
+
+See `systemprompt.md` for a copy-paste system prompt (LM Studio and similar). `.cursor/skills/memorymcp-tokens/SKILL.md` has extended Cursor skill guidance.
 
 ## MCP tools
 
 ### Guide
-- `get_memorymcp_guide` – workflow and usage guide (call first when unsure)
+- `start_here` – onboarding README (when to save/retrieve; ask before saving unsolicited facts)
+- `get_memorymcp_guide` – workflow and usage guide by topic
 
 ### Memories
 - `create_memory` – store raw observation (raw text is immutable)
-- `get_memory` – get memory with linked data and revision history
+- `get_memory` – get memory by **Ref** or Guid
 - `list_memories` – paginated list (active only by default)
 - `update_memory_from` – set/correct when the observation occurred
 - `invalidate_memory` – mark as invalid or retracted without deleting raw text

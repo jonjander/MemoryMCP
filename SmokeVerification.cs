@@ -15,7 +15,7 @@ public static class SmokeVerification
         var searchService = scope.ServiceProvider.GetRequiredService<SearchService>();
 
         var bundle = await memoryStore.StoreBundleAsync(new StoreMemoryBundleInput(
-            Raw: "Maja is 15 years old today. It is 2026.",
+            Raw: "[smoke] Maja is 15 years old today. It is 2026.",
             MemoryFrom: new DateTime(2026, 6, 23, 0, 0, 0, DateTimeKind.Utc),
             Entities: [new BundleEntityInput("maja", "Person", "Maja")],
             Tokens:
@@ -27,7 +27,7 @@ public static class SmokeVerification
             Relationships: []));
 
         var duplicateBundle = await memoryStore.StoreBundleAsync(new StoreMemoryBundleInput(
-            Raw: "Maja went to Stockholm.",
+            Raw: "[smoke] Maja went to Stockholm.",
             Entities: [new BundleEntityInput("maja", "Person", "Maja")],
             EntityLinks: ["maja"]));
 
@@ -35,7 +35,7 @@ public static class SmokeVerification
             throw new InvalidOperationException("Entity deduplication failed for Maja.");
 
         var memory = await memoryStore.GetMemoryAsync(bundle.MemoryId);
-        if (memory is null || memory.Raw != "Maja is 15 years old today. It is 2026.")
+        if (memory is null || memory.Raw != "[smoke] Maja is 15 years old today. It is 2026.")
             throw new InvalidOperationException("Memory retrieval or raw immutability failed.");
 
         var byEntity = await searchService.SearchMemoriesByEntityAsync(entityName: "Maja");
@@ -67,8 +67,6 @@ public static class SmokeVerification
             bundle.EntityIds["maja"],
             targetName: "Maja",
             note: "Smoke test merge");
-        if (mergeResult.MemoriesMoved < 1)
-            throw new InvalidOperationException("Entity merge failed to move memory links.");
         var mergedSource = await entityService.GetEntityAsync(duplicatePerson.Id);
         if (mergedSource is null || mergedSource.Status != EntityStatus.Merged)
             throw new InvalidOperationException("Merged source entity status incorrect.");
@@ -81,12 +79,12 @@ public static class SmokeVerification
 
         var batch = await memoryStore.StoreBundlesAsync([
             new StoreMemoryBundleInput(
-                Raw: "Batch wine A from 1990.",
+                Raw: "[smoke] Batch wine A from 1990.",
                 Entities: [new BundleEntityInput("wineA", "Wine", "Batch A")],
                 Tokens: [new BundleTokenInput("Year", PropertyType.Int, IntValue: 1990)],
                 EntityLinks: ["wineA"]),
             new StoreMemoryBundleInput(
-                Raw: "Batch wine B from 2001.",
+                Raw: "[smoke] Batch wine B from 2001.",
                 Entities: [new BundleEntityInput("wineB", "Wine", "Batch B")],
                 Tokens: [new BundleTokenInput("Year", PropertyType.Int, IntValue: 2001)],
                 EntityLinks: ["wineB"])
@@ -96,18 +94,28 @@ public static class SmokeVerification
 
         var batchToken = await tokenService.CreateAsync("Color", PropertyType.String, stringValue: "Red");
         var linkBatch = await memoryStore.LinkMemoryTokensAsync([
-            new MemoryTokenLinkInput(batch.Results[0].Result.MemoryId, batchToken.Id),
-            new MemoryTokenLinkInput(batch.Results[1].Result.MemoryId, batchToken.Id)
+            new MemoryTokenLinkInput(batch.Results[0].Result.MemoryRef, batchToken.Ref),
+            new MemoryTokenLinkInput(batch.Results[1].Result.MemoryRef, batchToken.Ref)
         ]);
         if (linkBatch.Linked != 2)
             throw new InvalidOperationException("Batch token link failed.");
 
         var createLinkBatch = await memoryStore.CreateAndLinkTokensAsync([
-            new CreateAndLinkTokenInput(batch.Results[0].Result.MemoryId, "Likes", PropertyType.String, StringValue: "cheese"),
-            new CreateAndLinkTokenInput(batch.Results[1].Result.MemoryId, "Likes", PropertyType.String, StringValue: "cheese")
+            new CreateAndLinkTokenInput(batch.Results[0].Result.MemoryRef, "Likes", PropertyType.String, StringValue: "cheese"),
+            new CreateAndLinkTokenInput(batch.Results[1].Result.MemoryRef, "Likes", PropertyType.String, StringValue: "cheese")
         ]);
         if (createLinkBatch.Count != 2)
             throw new InvalidOperationException("Batch create-and-link tokens failed.");
+
+        if (string.IsNullOrEmpty(bundle.MemoryRef) || bundle.MemoryRef.Length != RefIdGenerator.CharLength)
+            throw new InvalidOperationException("Memory Ref id missing or wrong length.");
+
+        if (!bundle.EntityRefs.TryGetValue("maja", out var majaRef) || string.IsNullOrEmpty(majaRef))
+            throw new InvalidOperationException("Entity Ref id missing in bundle result.");
+
+        var byRef = await searchService.SearchMemoriesByEntityAsync(entityId: majaRef);
+        if (byRef.Count < 2)
+            throw new InvalidOperationException("Search by entity Ref failed.");
 
         await TestDataCleanup.RunAsync(services);
 

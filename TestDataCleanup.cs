@@ -1,21 +1,28 @@
+using MemoryMCP;
 using MemoryMCP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 public static class TestDataCleanup
 {
+    /// <summary>Exact raw texts from smoke verification — safe to delete from dev databases.</summary>
     private static readonly string[] SmokeMemoryRaws =
     [
         "Maja is 15 years old today. It is 2026.",
         "Maja went to Stockholm.",
+        "[smoke] Maja is 15 years old today. It is 2026.",
+        "[smoke] Maja went to Stockholm.",
         "Memory linked only to duplicate entity for merge smoke test.",
         "Batch wine A from 1990.",
-        "Batch wine B from 2001."
+        "Batch wine B from 2001.",
+        "[smoke] Batch wine A from 1990.",
+        "[smoke] Batch wine B from 2001."
     ];
 
-    private static readonly string[] SmokeEntityNamePrefixes =
+    private static readonly string[] SmokeEntityNames =
     [
         "Maja",
+        "Maja Duplicate",
         "David-sword",
         "Japan-sword",
         "Batch A",
@@ -28,81 +35,68 @@ public static class TestDataCleanup
         var db = scope.ServiceProvider.GetRequiredService<MemoryDbContext>();
 
         var memories = await db.Memories
-            .Where(m => SmokeMemoryRaws.Contains(m.Raw))
+            .Where(m => SmokeMemoryRaws.Contains(m.Raw) || m.Raw.Contains("Maja went to Stockholm"))
             .ToListAsync();
-        var memoryIds = memories.Select(m => m.Id).ToList();
 
-        var entities = await db.Entities
-            .Where(e => SmokeEntityNamePrefixes.Any(prefix => e.Name.StartsWith(prefix)))
-            .ToListAsync();
-        var entityIds = entities.Select(e => e.Id).ToList();
-
-        var relationships = await db.EntityRelationships
-            .Where(r => entityIds.Contains(r.FromEntityId) || entityIds.Contains(r.ToEntityId) || (r.MemoryId != null && memoryIds.Contains(r.MemoryId.Value)))
-            .ToListAsync();
-        db.EntityRelationships.RemoveRange(relationships);
-
-        var entityRevisions = await db.EntityRevisions
-            .Where(r => entityIds.Contains(r.EntityId))
-            .ToListAsync();
-        db.EntityRevisions.RemoveRange(entityRevisions);
-
-        var memoryRevisions = await db.MemoryRevisions
-            .Where(r => memoryIds.Contains(r.MemoryId))
-            .ToListAsync();
-        db.MemoryRevisions.RemoveRange(memoryRevisions);
-
-        var memoryTokens = await db.MemoryTokens
-            .Where(mt => memoryIds.Contains(mt.MemoryId))
-            .ToListAsync();
-        db.MemoryTokens.RemoveRange(memoryTokens);
-
-        var memoryEntities = await db.MemoryEntities
-            .Where(me => memoryIds.Contains(me.MemoryId) || entityIds.Contains(me.EntityId))
-            .ToListAsync();
-        db.MemoryEntities.RemoveRange(memoryEntities);
-
-        foreach (var memory in memories)
+        if (memories.Count > 0)
         {
-            memory.SupersedesMemoryId = null;
-            memory.SupersededByMemoryId = null;
+            db.Memories.RemoveRange(memories);
+            await db.SaveChangesAsync();
         }
 
-        db.Memories.RemoveRange(memories);
+        for (var round = 0; round < 32; round++)
+        {
+            var smokeEntityIds = await db.Entities
+                .Where(e => SmokeEntityNames.Contains(e.Name))
+                .Select(e => e.Id)
+                .ToListAsync();
+            if (smokeEntityIds.Count == 0)
+                break;
 
-        var smokeTokens = await db.Tokens
+            var mergeSources = await db.Entities
+                .Where(e => e.MergedIntoEntityId != null && smokeEntityIds.Contains(e.MergedIntoEntityId.Value))
+                .ToListAsync();
+            if (mergeSources.Count > 0)
+            {
+                db.Entities.RemoveRange(mergeSources);
+                await db.SaveChangesAsync();
+                continue;
+            }
+
+            var relationships = await db.EntityRelationships
+                .Where(r => smokeEntityIds.Contains(r.FromEntityId) || smokeEntityIds.Contains(r.ToEntityId))
+                .ToListAsync();
+            if (relationships.Count > 0)
+            {
+                db.EntityRelationships.RemoveRange(relationships);
+                await db.SaveChangesAsync();
+                continue;
+            }
+
+            var deletable = await db.Entities
+                .Where(e => SmokeEntityNames.Contains(e.Name))
+                .Where(e => !db.MemoryEntities.Any(me => me.EntityId == e.Id))
+                .ToListAsync();
+            if (deletable.Count == 0)
+                break;
+
+            db.Entities.RemoveRange(deletable);
+            await db.SaveChangesAsync();
+        }
+
+        var orphanSmokeTokens = await db.Tokens
+            .Where(t => !t.Memories.Any())
             .Where(t =>
                 (t.Property == "Age" && t.IntValue == 15) ||
                 (t.Property == "Year" && (t.IntValue == 2011 || t.IntValue == 1990 || t.IntValue == 2001)) ||
                 (t.Property == "Color" && (t.StringValue == "Blue" || t.StringValue == "Red")) ||
                 (t.Property == "Likes" && t.StringValue == "cheese"))
             .ToListAsync();
-        var tokenIds = smokeTokens.Select(t => t.Id).ToList();
-
-        var tokenRevisions = await db.TokenRevisions
-            .Where(r => tokenIds.Contains(r.TokenId))
-            .ToListAsync();
-        db.TokenRevisions.RemoveRange(tokenRevisions);
-
-        var remainingMemoryTokens = await db.MemoryTokens
-            .Where(mt => tokenIds.Contains(mt.TokenId))
-            .ToListAsync();
-        db.MemoryTokens.RemoveRange(remainingMemoryTokens);
-
-        foreach (var token in smokeTokens)
+        if (orphanSmokeTokens.Count > 0)
         {
-            token.SupersedesTokenId = null;
-            token.SupersededByTokenId = null;
+            db.Tokens.RemoveRange(orphanSmokeTokens);
+            await db.SaveChangesAsync();
         }
-
-        db.Tokens.RemoveRange(smokeTokens);
-
-        foreach (var entity in entities)
-            entity.MergedIntoEntityId = null;
-
-        db.Entities.RemoveRange(entities);
-
-        await db.SaveChangesAsync();
 
         Console.Error.WriteLine($"Removed {memories.Count} smoke-test memories and related test data.");
         return 0;

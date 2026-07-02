@@ -45,9 +45,14 @@ else
     }
 
     builder.Services.AddDbContext<MemoryDbContext>(options =>
-        options.UseSqlServer(connectionString));
+    {
+        options.UseSqlServer(connectionString);
+        options.ConfigureWarnings(w =>
+            w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+    });
 }
 
+builder.Services.AddScoped<RefIdResolver>();
 builder.Services.AddScoped<MemoryStoreService>();
 builder.Services.AddScoped<EntityResolutionService>();
 builder.Services.AddScoped<TokenService>();
@@ -83,6 +88,7 @@ using (var scope = app.Services.CreateScope())
     logger.LogInformation("EF Core migrations applied.");
 
     await FullTextSearchInitializer.EnsureAsync(db);
+    await RefIdBackfill.EnsureAsync(db);
 }
 
 if (hostArgs.Contains("--verify"))

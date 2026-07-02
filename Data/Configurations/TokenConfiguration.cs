@@ -10,6 +10,8 @@ public class TokenConfiguration : IEntityTypeConfiguration<Token>
         builder.ToTable("Tokens");
         builder.HasKey(t => t.Id);
         builder.Property(t => t.Property).IsRequired().HasMaxLength(256);
+        builder.Property(t => t.Ref).HasMaxLength(RefIdGenerator.CharLength);
+        builder.HasIndex(t => t.Ref).IsUnique().HasFilter("[Ref] IS NOT NULL");
         builder.Property(t => t.SearchValue).IsRequired().HasMaxLength(512);
         builder.Property(t => t.StringValue).HasMaxLength(1024);
         builder.HasIndex(t => t.Status);

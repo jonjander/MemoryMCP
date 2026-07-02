@@ -53,6 +53,9 @@ public static class TokenPropertyGuidance
 
     public const string StoreBundleDescription =
         "Store a memory with entities, tokens, and relationships in one transaction. " +
+        "Response includes memoryRef, entityRefs, tokenRefs (prefer Ref in follow-ups; Guid also returned). " +
+        "Use when the user explicitly asks to save ('spara i minnet', 'kom ihåg') or after they confirm they want a fact in memory. " +
+        "Do NOT ask about entity structure — infer entities and tokens from the text. " +
         "Use abstract token properties; link entities via entityLinks. " +
         "When a memory mentions multiple subjects, still use shared property names and multiple tokens — " +
         "or split into one memory per subject if facts would be ambiguous. " +

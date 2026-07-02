@@ -221,7 +221,7 @@ public class EntityResolutionService(MemoryDbContext db)
             .ToListAsync(cancellationToken);
 
         return entities
-            .Select(x => new EntitySummaryDto(x.Entity.Id, x.Entity.Type, x.Entity.Name, x.MemoryCount, x.Entity.Status, x.Entity.MergedIntoEntityId))
+            .Select(x => ModelMappers.ToSummary(x.Entity, x.MemoryCount))
             .ToList();
     }
 
@@ -244,10 +244,11 @@ public class EntityResolutionService(MemoryDbContext db)
             .Select(me => me.Memory)
             .OrderByDescending(m => m.Created)
             .Take(10)
-            .Select(m => new MemorySummaryDto(m.Id, m.Raw, m.Created, m.MemoryFrom, m.Status, m.SupersedesMemoryId, m.SupersededByMemoryId))
+            .Select(m => ModelMappers.ToSummary(m))
             .ToListAsync(cancellationToken);
 
         return new EntityDetailDto(
+            entity.Ref ?? string.Empty,
             entity.Id,
             entity.Type,
             entity.Name,
@@ -268,7 +269,7 @@ public class EntityResolutionService(MemoryDbContext db)
             return null;
 
         return new EntityHistoryDto(
-            new EntitySummaryDto(entity.Id, entity.Type, entity.Name, entity.Memories.Count, entity.Status, entity.MergedIntoEntityId),
+            ModelMappers.ToSummary(entity, entity.Memories.Count),
             entity.Revisions.OrderByDescending(r => r.Created).Select(ToRevisionDto).ToList());
     }
 
@@ -323,7 +324,7 @@ public class EntityResolutionService(MemoryDbContext db)
     {
         var entity = await db.Entities.AsNoTracking().FirstAsync(e => e.Id == id, cancellationToken);
         var memoryCount = await db.MemoryEntities.CountAsync(me => me.EntityId == id, cancellationToken);
-        return new EntitySummaryDto(entity.Id, entity.Type, entity.Name, memoryCount, entity.Status, entity.MergedIntoEntityId);
+        return ModelMappers.ToSummary(entity, memoryCount);
     }
 
     private static EntityRevisionDto ToRevisionDto(EntityRevision revision) =>

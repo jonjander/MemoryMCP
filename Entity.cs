@@ -1,8 +1,11 @@
 namespace MemoryMCP;
 
-public class Entity
+public class Entity : IHasRef
 {
     public Guid Id { get; set; }
+
+    /// <summary>Short Base64url alias for agent-facing APIs (8 chars). Guid remains internal PK.</summary>
+    public string? Ref { get; set; }
 
     public string Type { get; set; } = string.Empty;
 

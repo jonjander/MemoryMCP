@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoryMCP.Services;
 
-public class MemoryStoreService(MemoryDbContext db)
+public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
 {
     public async Task<MemorySummaryDto> CreateMemoryAsync(string raw, DateTime? memoryFrom = null, CancellationToken cancellationToken = default)
     {
@@ -319,8 +319,9 @@ public class MemoryStoreService(MemoryDbContext db)
     public async Task<StoreMemoryBundleResult> StoreBundleAsync(StoreMemoryBundleInput input, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var result = await StoreBundleCoreAsync(input, cancellationToken);
+        var core = await StoreBundleCoreAsync(input, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        var result = await BuildBundleResultAsync(core, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return result;
     }
@@ -338,12 +339,13 @@ public class MemoryStoreService(MemoryDbContext db)
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var results = new List<StoreMemoryBundleBatchItemResult>(bundles.Count);
+        var cores = new List<BundleCoreResult>(bundles.Count);
         for (var i = 0; i < bundles.Count; i++)
         {
             try
             {
-                var result = await StoreBundleCoreAsync(bundles[i], cancellationToken);
-                results.Add(new StoreMemoryBundleBatchItemResult(i, result));
+                var core = await StoreBundleCoreAsync(bundles[i], cancellationToken);
+                cores.Add(core);
             }
             catch (Exception ex)
             {
@@ -352,9 +354,55 @@ public class MemoryStoreService(MemoryDbContext db)
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        for (var i = 0; i < cores.Count; i++)
+        {
+            var result = await BuildBundleResultAsync(cores[i], cancellationToken);
+            results.Add(new StoreMemoryBundleBatchItemResult(i, result));
+        }
+
         await transaction.CommitAsync(cancellationToken);
         return new StoreMemoryBundlesResult(results.Count, results);
     }
+
+    private async Task<StoreMemoryBundleResult> BuildBundleResultAsync(BundleCoreResult core, CancellationToken cancellationToken)
+    {
+        var memory = await db.Memories.AsNoTracking().FirstAsync(m => m.Id == core.MemoryId, cancellationToken);
+
+        var entityGuidList = core.EntityIds.Values.Distinct().ToList();
+        var entities = entityGuidList.Count == 0
+            ? new Dictionary<Guid, Entity>()
+            : await db.Entities.AsNoTracking()
+                .Where(e => entityGuidList.Contains(e.Id))
+                .ToDictionaryAsync(e => e.Id, cancellationToken);
+
+        var entityRefs = core.EntityIds.ToDictionary(
+            kv => kv.Key,
+            kv => entities[kv.Value].Ref ?? string.Empty,
+            StringComparer.OrdinalIgnoreCase);
+
+        var tokens = core.TokenIds.Count == 0
+            ? new Dictionary<Guid, Token>()
+            : await db.Tokens.AsNoTracking()
+                .Where(t => core.TokenIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, cancellationToken);
+
+        var tokenRefs = core.TokenIds.Select(id => tokens[id].Ref ?? string.Empty).ToList();
+
+        return new StoreMemoryBundleResult(
+            memory.Ref ?? string.Empty,
+            memory.Id,
+            entityRefs,
+            core.EntityIds,
+            tokenRefs,
+            core.TokenIds,
+            core.RelationshipIds);
+    }
+
+    private sealed record BundleCoreResult(
+        Guid MemoryId,
+        IReadOnlyDictionary<string, Guid> EntityIds,
+        IReadOnlyList<Guid> TokenIds,
+        IReadOnlyList<Guid> RelationshipIds);
 
     public async Task<LinkMemoryTokensResult> LinkMemoryTokensAsync(
         IReadOnlyList<MemoryTokenLinkInput> links,
@@ -368,41 +416,72 @@ public class MemoryStoreService(MemoryDbContext db)
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-        var processed = new List<MemoryTokenLinkInput>();
+        var processed = new List<(Guid MemoryId, Guid TokenId)>();
         var newlyLinked = 0;
         var skipped = 0;
 
         foreach (var link in links)
         {
+            var memoryId = await refResolver.ResolveMemoryIdAsync(link.MemoryId, cancellationToken);
+            var tokenId = await refResolver.ResolveTokenIdAsync(link.TokenId, cancellationToken);
+
             var exists = await db.MemoryTokens.AnyAsync(
-                mt => mt.MemoryId == link.MemoryId && mt.TokenId == link.TokenId,
+                mt => mt.MemoryId == memoryId && mt.TokenId == tokenId,
                 cancellationToken);
 
             if (exists)
             {
                 skipped++;
-                processed.Add(link);
+                processed.Add((memoryId, tokenId));
                 continue;
             }
 
-            var memoryExists = await db.Memories.AnyAsync(m => m.Id == link.MemoryId, cancellationToken);
-            var tokenExists = await db.Tokens.AnyAsync(t => t.Id == link.TokenId, cancellationToken);
+            var memoryExists = await db.Memories.AnyAsync(m => m.Id == memoryId, cancellationToken);
+            var tokenExists = await db.Tokens.AnyAsync(t => t.Id == tokenId, cancellationToken);
             if (!memoryExists || !tokenExists)
                 throw new InvalidOperationException($"Memory or token not found for link memoryId={link.MemoryId}, tokenId={link.TokenId}.");
 
             db.MemoryTokens.Add(new MemoryToken
             {
                 Id = Guid.NewGuid(),
-                MemoryId = link.MemoryId,
-                TokenId = link.TokenId
+                MemoryId = memoryId,
+                TokenId = tokenId
             });
             newlyLinked++;
-            processed.Add(link);
+            processed.Add((memoryId, tokenId));
         }
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new LinkMemoryTokensResult(links.Count, newlyLinked, skipped, processed);
+
+        var resolved = await ResolveLinkRefsAsync(processed, cancellationToken);
+        return new LinkMemoryTokensResult(links.Count, newlyLinked, skipped, resolved);
+    }
+
+    private async Task<IReadOnlyList<MemoryTokenLinkResolved>> ResolveLinkRefsAsync(
+        IReadOnlyList<(Guid MemoryId, Guid TokenId)> links,
+        CancellationToken cancellationToken)
+    {
+        if (links.Count == 0)
+            return [];
+
+        var memoryIds = links.Select(l => l.MemoryId).Distinct().ToList();
+        var tokenIds = links.Select(l => l.TokenId).Distinct().ToList();
+
+        var memories = await db.Memories.AsNoTracking()
+            .Where(m => memoryIds.Contains(m.Id))
+            .ToDictionaryAsync(m => m.Id, cancellationToken);
+        var tokens = await db.Tokens.AsNoTracking()
+            .Where(t => tokenIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, cancellationToken);
+
+        return links
+            .Select(l => new MemoryTokenLinkResolved(
+                memories[l.MemoryId].Ref ?? string.Empty,
+                l.MemoryId,
+                tokens[l.TokenId].Ref ?? string.Empty,
+                l.TokenId))
+            .ToList();
     }
 
     public async Task<CreateAndLinkTokensResult> CreateAndLinkTokensAsync(
@@ -425,7 +504,8 @@ public class MemoryStoreService(MemoryDbContext db)
             var item = items[i];
             try
             {
-                var memoryExists = await db.Memories.AnyAsync(m => m.Id == item.MemoryId, cancellationToken);
+                var memoryId = await refResolver.ResolveMemoryIdAsync(item.MemoryId, cancellationToken);
+                var memoryExists = await db.Memories.AnyAsync(m => m.Id == memoryId, cancellationToken);
                 if (!memoryExists)
                     throw new InvalidOperationException($"Memory not found: {item.MemoryId}.");
 
@@ -445,7 +525,7 @@ public class MemoryStoreService(MemoryDbContext db)
                     : await tokenService.CreateAsync(tokenInput, cancellationToken);
 
                 var linkExists = await db.MemoryTokens.AnyAsync(
-                    mt => mt.MemoryId == item.MemoryId && mt.TokenId == token.Id,
+                    mt => mt.MemoryId == memoryId && mt.TokenId == token.Id,
                     cancellationToken);
 
                 if (!linkExists)
@@ -453,13 +533,15 @@ public class MemoryStoreService(MemoryDbContext db)
                     db.MemoryTokens.Add(new MemoryToken
                     {
                         Id = Guid.NewGuid(),
-                        MemoryId = item.MemoryId,
+                        MemoryId = memoryId,
                         TokenId = token.Id
                     });
                 }
 
                 results.Add(new CreateAndLinkTokenResultItem(
-                    item.MemoryId,
+                    string.Empty,
+                    memoryId,
+                    string.Empty,
                     token.Id,
                     TokenValueHelper.ToSummary(token)));
             }
@@ -470,11 +552,20 @@ public class MemoryStoreService(MemoryDbContext db)
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        for (var i = 0; i < results.Count; i++)
+        {
+            var item = results[i];
+            var memory = await db.Memories.AsNoTracking().FirstAsync(m => m.Id == item.MemoryId, cancellationToken);
+            var token = await db.Tokens.AsNoTracking().FirstAsync(t => t.Id == item.TokenId, cancellationToken);
+            results[i] = new CreateAndLinkTokenResultItem(memory.Ref ?? string.Empty, item.MemoryId, token.Ref ?? string.Empty, item.TokenId, item.Token);
+        }
+
         await transaction.CommitAsync(cancellationToken);
         return new CreateAndLinkTokensResult(results.Count, results);
     }
 
-    private async Task<StoreMemoryBundleResult> StoreBundleCoreAsync(
+    private async Task<BundleCoreResult> StoreBundleCoreAsync(
         StoreMemoryBundleInput input,
         CancellationToken cancellationToken)
     {
@@ -535,7 +626,7 @@ public class MemoryStoreService(MemoryDbContext db)
             relationshipIds.Add(relationship.Id);
         }
 
-        return new StoreMemoryBundleResult(memory.Id, entityIds, tokenIds, relationshipIds);
+        return new BundleCoreResult(memory.Id, entityIds, tokenIds, relationshipIds);
     }
 
     private static void EnsureMutable(Memory memory)
@@ -575,6 +666,7 @@ public class MemoryStoreService(MemoryDbContext db)
 
     private static MemoryDetailDto ToDetail(Memory memory, IReadOnlyList<EntityRelationship> relationships) =>
         new(
+            memory.Ref ?? string.Empty,
             memory.Id,
             memory.Raw,
             memory.Created,
@@ -584,7 +676,7 @@ public class MemoryStoreService(MemoryDbContext db)
             memory.StatusNote,
             memory.SupersedesMemoryId,
             memory.SupersededByMemoryId,
-            memory.Entities.Select(me => new EntitySummaryDto(me.Entity.Id, me.Entity.Type, me.Entity.Name, 0)).ToList(),
+            memory.Entities.Select(me => ModelMappers.ToSummary(me.Entity, 0)).ToList(),
             memory.Tokens.Select(mt => TokenValueHelper.ToSummary(mt.Token)).ToList(),
             relationships.Select(RelationshipService.ToSummary).ToList(),
             memory.Revisions.OrderByDescending(r => r.Created).Select(ToRevisionDto).ToList(),
@@ -604,13 +696,5 @@ public class MemoryStoreService(MemoryDbContext db)
             revision.SuccessorMemoryId,
             revision.SuccessorRaw);
 
-    private static MemorySummaryDto ToSummary(Memory memory) =>
-        new(
-            memory.Id,
-            memory.Raw,
-            memory.Created,
-            memory.MemoryFrom,
-            memory.Status,
-            memory.SupersedesMemoryId,
-            memory.SupersededByMemoryId);
+    private static MemorySummaryDto ToSummary(Memory memory) => ModelMappers.ToSummary(memory);
 }
