@@ -72,7 +72,7 @@ if (-not (Wait-FileUnlocked -Path $mcpDll)) {
     Write-Error "MemoryMCP.dll is still locked: $mcpDll"
 }
 
-dotnet build MemoryMCP.csproj -o bin/mcp
+dotnet build MemoryMCP.csproj -f net10.0 -o bin/mcp
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "`nBuilt to bin/mcp. Tool list:" -ForegroundColor Green

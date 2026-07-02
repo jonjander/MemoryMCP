@@ -4,7 +4,7 @@ using ModelContextProtocol.Server;
 namespace MemoryMCP.Tools;
 
 [McpServerToolType]
-public class GuideTools
+public class GuideTools(ServerStartupOptions startupOptions)
 {
     [McpServerTool(Name = "start_here"), Description(
         "READ THIS FIRST — onboarding README for MemoryMCP. " +
@@ -13,7 +13,7 @@ public class GuideTools
         "Relevant fact without save request → may ask once 'Vill du att jag ska lägga detta i minnet?'. " +
         "When to RETRIEVE: user asks to recall or prior knowledge helps → search_* without asking. " +
         "Once saving: infer entities and tokens — never ask about Person entity structure.")]
-    public static string StartHere() => AgentGuidance.StartHere;
+    public string StartHere() => AgentGuidance.BuildStartHere(startupOptions.WhoAmI);
 
     [McpServerTool, Description(
         "Get MemoryMCP workflow and usage guidance. Call start_here first if you are new. " +

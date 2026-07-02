@@ -9,7 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
-var (databaseType, hostArgs) = DatabaseBootstrap.ParseArgs(args);
+var (databaseType, hostArgs, startupOptions) = DatabaseBootstrap.ParseArgs(args);
 
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
@@ -24,9 +24,11 @@ builder.Logging.AddConsole(consoleLogOptions =>
 
 builder.Configuration.AddEnvironmentVariables();
 
+builder.Services.AddSingleton(startupOptions);
+
 if (databaseType == DatabaseType.Sqlite)
 {
-    var sqliteConnectionString = DatabaseBootstrap.ResolveSqliteConnectionString();
+    var sqliteConnectionString = DatabaseBootstrap.ResolveSqliteConnectionString(startupOptions);
     builder.Services.AddDbContext<SqliteMemoryDbContext>(options =>
         options.UseSqlite(sqliteConnectionString));
     builder.Services.AddScoped<MemoryDbContext>(sp => sp.GetRequiredService<SqliteMemoryDbContext>());
@@ -47,8 +49,10 @@ else
     builder.Services.AddDbContext<MemoryDbContext>(options =>
     {
         options.UseSqlServer(connectionString);
+#if NET10_0_OR_GREATER
         options.ConfigureWarnings(w =>
             w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+#endif
     });
 }
 
@@ -60,7 +64,7 @@ builder.Services.AddScoped<RelationshipService>();
 builder.Services.AddScoped<SearchService>();
 
 builder.Services
-    .AddMcpServer(options => options.ServerInstructions = AgentGuidance.ServerInstructions)
+    .AddMcpServer(options => options.ServerInstructions = AgentGuidance.BuildServerInstructions(startupOptions.WhoAmI))
     .WithStdioServerTransport()
     .WithTools<GuideTools>()
     .WithTools<MemoryTools>()

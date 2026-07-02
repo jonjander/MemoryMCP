@@ -33,6 +33,9 @@ public static class RefIdBackfill
 
     private static async Task EnsureUniqueIndexesAsync(MemoryDbContext db, CancellationToken cancellationToken)
     {
+        if (db.Database.IsSqlite())
+            return;
+
         await db.Database.ExecuteSqlRawAsync(
             """
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Entities_Ref' AND object_id = OBJECT_ID(N'[Entities]'))

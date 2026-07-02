@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "memorymcp-sqlite": {
+      "command": "dotnet",
+      "args": [
+        "C:\\Git\\MemoryMCP\\bin\\mcp\\MemoryMCP.dll",
+        "--typ",
+        "sqlite",
+        "--whoami",
+        "Jon Jander",
+        "--dbName",
+        "jon-memory.db"
+      ]
+    }
+  }
+}

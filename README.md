@@ -4,7 +4,7 @@ Local MCP server for long-term AI memory backed by EF Core. Supports **SQL Serve
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [.NET SDK](https://dotnet.microsoft.com/download) — **.NET 10** for local Windows dev, **.NET 8** for `dist/linux-x64` offline Docker
 - **SQL Server** (default) — database `MemoryMCP` is created automatically on first run via migrations
 - **SQLite** (optional) — no external database; use `--typ sqlite` to create `memory.db` next to the executable
 
@@ -16,11 +16,18 @@ Requires a connection string in `appsettings.json` or via environment variable.
 
 ### SQLite (portable / offline)
 
-No connection string needed. Creates and uses `memory.db` in the same folder as the executable/DLL:
+No connection string needed. Creates and uses a SQLite file in the same folder as the executable/DLL (default `memory.db`):
 
 ```bash
 dotnet run -- --typ sqlite
+dotnet run -- --typ sqlite --dbName jon-memory.db
+dotnet run -- --typ sqlite --whoami "Jon Jander"
 ```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dbName` | `memory.db` | SQLite file name next to the executable (not a path) |
+| `--whoami` | *(none)* | Full name (för- och efternamn). Agent maps "jag" / "I" / "me" to this Person in `store_memory_bundle` |
 
 Or via environment variable (useful in Cursor MCP config):
 
@@ -32,13 +39,23 @@ Text search uses `LIKE` on SQLite (no SQL Server full-text search). All other fe
 
 ## Portable offline publish
 
-Build on a machine **with internet**, then copy the publish folder to an offline Linux Docker (or Windows) host that has .NET 10:
+Build on a machine **with internet**, then copy the publish folder to an offline Linux Docker (or Windows) host:
 
 ```powershell
 .\scripts\publish-portable.ps1
 ```
 
-This produces `dist/linux-x64/` and `dist/win-x64/`. On the target host:
+This produces:
+- `dist/linux-x64/` — **.NET 8**, for Linux Docker (`mcr.microsoft.com/dotnet/sdk:8.0`)
+- `dist/win-x64/` — **.NET 10**, for local Windows / Cursor MCP
+
+Publish only Linux (.NET 8):
+
+```powershell
+.\scripts\publish-portable.ps1 -Runtime linux-x64
+```
+
+On the target Linux host:
 
 ```bash
 cd /app
@@ -90,6 +107,19 @@ The server uses **stdio** transport for MCP clients such as Cursor.
 
 ## Cursor MCP configuration
 
+### SQLite i detta repo (Windows, för test)
+
+Projektet har en lokal MCP-konfiguration i [`.cursor/mcp.json`](.cursor/mcp.json) (gitignored). Mall: [`.cursor/mcp.json.example`](.cursor/mcp.json.example).
+
+1. Bygg MCP-output:
+   ```powershell
+   .\scripts\rebuild-mcp.ps1 -Sqlite
+   ```
+2. **Starta om Cursor** eller gå till **Settings → MCP** och slå på **`memorymcp-sqlite`**
+3. Databasen skapas som `bin\mcp\memory.db` vid första körning
+
+Servernamnet är `memorymcp-sqlite` (separat från ev. global `memorymcp` i `%USERPROFILE%\.cursor\mcp.json`).
+
 Use the dedicated MCP output folder so rebuilds work while Cursor has the server running:
 
 ```json
@@ -108,7 +138,7 @@ A ready-made snippet for your **global** Cursor config (`%USERPROFILE%\.cursor\m
 ```json
 "memorymcp": {
   "command": "dotnet",
-  "args": ["C:\\Git\\MemoryMCP\\bin\\mcp\\MemoryMCP.dll", "--typ", "sqlite"]
+  "args": ["C:\\Git\\MemoryMCP\\bin\\mcp\\MemoryMCP.dll", "--typ", "sqlite", "--whoami", "För Efternamn"]
 }
 ```
 

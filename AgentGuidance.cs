@@ -14,6 +14,40 @@ public static class AgentGuidance
       "Retrieve: when user asks to recall or when prior knowledge helps — search_* without asking permission. " +
       "New agent: call start_here first. Never use create_memory alone for new observations.";
 
+  public static string BuildServerInstructions(string? whoAmI)
+  {
+    if (string.IsNullOrWhiteSpace(whoAmI))
+      return ServerInstructions;
+
+    var name = whoAmI.Trim();
+    return ServerInstructions +
+           $" User identity: when the user says \"jag\", \"I\", \"me\", \"min/mitt\", they mean {name} (Person). " +
+           $"Map first-person statements to that Person entity in store_memory_bundle — never ask who \"jag\" is.";
+  }
+
+  public static string BuildStartHere(string? whoAmI)
+  {
+    if (string.IsNullOrWhiteSpace(whoAmI))
+      return StartHere;
+
+    var name = whoAmI.Trim();
+    var whoAmISection = $"""
+        ## Current user (whoami)
+
+        When the user says **"jag"**, **"I"**, **"me"**, **"min/mitt"**, they refer to **{name}** (Person).
+        - In `store_memory_bundle`: use a Person entity with `name` "{name}" and link first-person memories to it.
+        - In `search_*`: treat questions about "jag/mig/min" as about {name}.
+        - Do **not** ask who "jag" is — this server is configured for that identity.
+
+        """;
+
+    const string anchor = "## Ref ids (primary — Guid still works)";
+    var index = StartHere.IndexOf(anchor, StringComparison.Ordinal);
+    return index < 0
+        ? whoAmISection + StartHere
+        : StartHere.Insert(index, whoAmISection);
+  }
+
   public const string RefIdsGuide =
       """
       # Ref ids — agent-facing identifiers

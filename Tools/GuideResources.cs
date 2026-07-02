@@ -4,11 +4,11 @@ using ModelContextProtocol.Server;
 namespace MemoryMCP.Tools;
 
 [McpServerResourceType]
-public class GuideResources
+public class GuideResources(ServerStartupOptions startupOptions)
 {
     [McpServerResource(UriTemplate = "memorymcp://guide/start", Name = "start", MimeType = "text/markdown")]
     [Description("Onboarding README: Ref ids, when to save vs ask, when to retrieve, store without structure prompts.")]
-    public static string StartGuide() => AgentGuidance.StartHere;
+    public string StartGuide() => AgentGuidance.BuildStartHere(startupOptions.WhoAmI);
 
     [McpServerResource(UriTemplate = "memorymcp://guide/refs", Name = "refs", MimeType = "text/markdown")]
     [Description("Ref vs Guid: prefer 8-char Ref in tool calls; Guid backward compatible.")]
