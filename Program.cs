@@ -9,9 +9,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
+var (databaseType, hostArgs) = DatabaseBootstrap.ParseArgs(args);
+
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
-    Args = args,
+    Args = hostArgs,
     ContentRootPath = AppContext.BaseDirectory
 });
 
@@ -22,18 +24,29 @@ builder.Logging.AddConsole(consoleLogOptions =>
 
 builder.Configuration.AddEnvironmentVariables();
 
-var connectionString = builder.Configuration.GetConnectionString("MemoryMCP")
-    ?? Environment.GetEnvironmentVariable("MEMORYMCP_CONNECTION_STRING");
-
-if (string.IsNullOrWhiteSpace(connectionString))
+if (databaseType == DatabaseType.Sqlite)
 {
-    throw new InvalidOperationException(
-        "Connection string 'MemoryMCP' is not configured. Set it in appsettings.json next to the executable " +
-        "or via the MEMORYMCP_CONNECTION_STRING / ConnectionStrings__MemoryMCP environment variable.");
+    var sqliteConnectionString = DatabaseBootstrap.ResolveSqliteConnectionString();
+    builder.Services.AddDbContext<SqliteMemoryDbContext>(options =>
+        options.UseSqlite(sqliteConnectionString));
+    builder.Services.AddScoped<MemoryDbContext>(sp => sp.GetRequiredService<SqliteMemoryDbContext>());
 }
+else
+{
+    var connectionString = builder.Configuration.GetConnectionString("MemoryMCP")
+        ?? Environment.GetEnvironmentVariable("MEMORYMCP_CONNECTION_STRING");
 
-builder.Services.AddDbContext<MemoryDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException(
+            "Connection string 'MemoryMCP' is not configured. Set it in appsettings.json next to the executable " +
+            "or via the MEMORYMCP_CONNECTION_STRING / ConnectionStrings__MemoryMCP environment variable, " +
+            "or use --typ sqlite for a local memory.db file.");
+    }
+
+    builder.Services.AddDbContext<MemoryDbContext>(options =>
+        options.UseSqlServer(connectionString));
+}
 
 builder.Services.AddScoped<MemoryStoreService>();
 builder.Services.AddScoped<EntityResolutionService>();
@@ -53,7 +66,7 @@ builder.Services
     .WithTools<BundleTools>()
     .WithResources<GuideResources>();
 
-if (args.Contains("--list-tools"))
+if (hostArgs.Contains("--list-tools"))
 {
     return ListToolsCli.Run();
 }
@@ -65,33 +78,33 @@ using (var scope = app.Services.CreateScope())
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
     var db = scope.ServiceProvider.GetRequiredService<MemoryDbContext>();
 
-    logger.LogInformation("Applying EF Core migrations...");
+    logger.LogInformation("Applying EF Core migrations ({DatabaseType})...", databaseType);
     await db.Database.MigrateAsync();
     logger.LogInformation("EF Core migrations applied.");
 
     await FullTextSearchInitializer.EnsureAsync(db);
 }
 
-if (args.Contains("--verify"))
+if (hostArgs.Contains("--verify"))
 {
     return await SmokeVerification.RunAsync(app.Services);
 }
 
-if (args.Contains("--cleanup-test-data"))
+if (hostArgs.Contains("--cleanup-test-data"))
 {
     return await TestDataCleanup.RunAsync(app.Services);
 }
 
-var storeBundleIndex = Array.IndexOf(args, "--store-bundle-json");
+var storeBundleIndex = Array.IndexOf(hostArgs, "--store-bundle-json");
 if (storeBundleIndex >= 0)
 {
-    if (storeBundleIndex + 1 >= args.Length)
+    if (storeBundleIndex + 1 >= hostArgs.Length)
     {
         Console.Error.WriteLine("Usage: --store-bundle-json <path-to-json>");
         return 1;
     }
 
-    return await StoreBundleCli.RunAsync(app.Services, args[storeBundleIndex + 1]);
+    return await StoreBundleCli.RunAsync(app.Services, hostArgs[storeBundleIndex + 1]);
 }
 
 await app.RunAsync();

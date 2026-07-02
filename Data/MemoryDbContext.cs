@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoryMCP.Data;
 
-public class MemoryDbContext(DbContextOptions<MemoryDbContext> options) : DbContext(options)
+public class MemoryDbContext(DbContextOptions options) : DbContext(options)
 {
     public DbSet<Memory> Memories => Set<Memory>();
     public DbSet<Entity> Entities => Set<Entity>();

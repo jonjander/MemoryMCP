@@ -3,6 +3,10 @@
 # Stops any running MemoryMCP host (typically dotnet exec bin/mcp/MemoryMCP.dll) before build.
 # After build: restart memorymcp in Cursor Settings > MCP if it does not reconnect automatically.
 
+param(
+    [switch]$Sqlite
+)
+
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
@@ -72,4 +76,5 @@ dotnet build MemoryMCP.csproj -o bin/mcp
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "`nBuilt to bin/mcp. Tool list:" -ForegroundColor Green
-dotnet exec bin/mcp/MemoryMCP.dll -- --list-tools
+$extraArgs = if ($Sqlite) { @("--typ", "sqlite") } else { @() }
+dotnet exec bin/mcp/MemoryMCP.dll -- @extraArgs --list-tools

@@ -50,6 +50,14 @@ secrets.json
 # Exported memory bundles (local data)
 bundle-*.json
 
+# SQLite local database
+memory.db
+memory.db-shm
+memory.db-wal
+
+# Portable publish output
+dist/
+
 # OS
 Thumbs.db
 ehthumbs.db

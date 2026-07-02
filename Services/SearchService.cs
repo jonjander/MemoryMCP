@@ -16,34 +16,37 @@ public class SearchService(MemoryDbContext db)
 
         var trimmed = query.Trim();
 
-        try
+        if (!db.Database.IsSqlite())
         {
-            List<Memory> ftsResults;
-            if (includeInactive)
+            try
             {
-                ftsResults = await db.Memories
-                    .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed})")
-                    .AsNoTracking()
-                    .OrderByDescending(m => m.Created)
-                    .Take(100)
-                    .ToListAsync(cancellationToken);
-            }
-            else
-            {
-                ftsResults = await db.Memories
-                    .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed}) AND [Status] = {(int)MemoryStatus.Active}")
-                    .AsNoTracking()
-                    .OrderByDescending(m => m.Created)
-                    .Take(100)
-                    .ToListAsync(cancellationToken);
-            }
+                List<Memory> ftsResults;
+                if (includeInactive)
+                {
+                    ftsResults = await db.Memories
+                        .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed})")
+                        .AsNoTracking()
+                        .OrderByDescending(m => m.Created)
+                        .Take(100)
+                        .ToListAsync(cancellationToken);
+                }
+                else
+                {
+                    ftsResults = await db.Memories
+                        .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed}) AND [Status] = {(int)MemoryStatus.Active}")
+                        .AsNoTracking()
+                        .OrderByDescending(m => m.Created)
+                        .Take(100)
+                        .ToListAsync(cancellationToken);
+                }
 
-            if (ftsResults.Count > 0)
-                return ftsResults.Select(ToSummary).ToList();
-        }
-        catch
-        {
-            // Fall back to LIKE when full-text search is unavailable.
+                if (ftsResults.Count > 0)
+                    return ftsResults.Select(ToSummary).ToList();
+            }
+            catch
+            {
+                // Fall back to LIKE when full-text search is unavailable.
+            }
         }
 
         var likePattern = $"%{trimmed}%";

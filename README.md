@@ -1,11 +1,59 @@
 # MemoryMCP
 
-Local MCP server for long-term AI memory backed by SQL Server and EF Core.
+Local MCP server for long-term AI memory backed by EF Core. Supports **SQL Server** (default) or **SQLite** (`--typ sqlite`) for zero-config and offline portable deployment.
 
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- SQL Server with database `MemoryMCP` (created automatically on first run via migrations)
+- **SQL Server** (default) — database `MemoryMCP` is created automatically on first run via migrations
+- **SQLite** (optional) — no external database; use `--typ sqlite` to create `memory.db` next to the executable
+
+## Database modes
+
+### SQL Server (default)
+
+Requires a connection string in `appsettings.json` or via environment variable.
+
+### SQLite (portable / offline)
+
+No connection string needed. Creates and uses `memory.db` in the same folder as the executable/DLL:
+
+```bash
+dotnet run -- --typ sqlite
+```
+
+Or via environment variable (useful in Cursor MCP config):
+
+```bash
+MEMORYMCP_TYP=sqlite dotnet MemoryMCP.dll
+```
+
+Text search uses `LIKE` on SQLite (no SQL Server full-text search). All other features work the same.
+
+## Portable offline publish
+
+Build on a machine **with internet**, then copy the publish folder to an offline Linux Docker (or Windows) host that has .NET 10:
+
+```powershell
+.\scripts\publish-portable.ps1
+```
+
+This produces `dist/linux-x64/` and `dist/win-x64/`. On the target host:
+
+```bash
+cd /app
+dotnet MemoryMCP.dll --typ sqlite
+dotnet MemoryMCP.dll --typ sqlite --verify
+```
+
+Optional Docker image that only copies pre-built output (no restore in container):
+
+```powershell
+.\scripts\publish-portable.ps1 -Runtime linux-x64
+docker build -f Dockerfile.offline -t memorymcp .
+```
+
+Do **not** run `dotnet build` or `dotnet run` from source in the offline container — that requires NuGet access.
 
 ### SQL Server with Docker
 
@@ -31,10 +79,11 @@ dotnet build
 dotnet run
 ```
 
-Run automated smoke verification (requires SQL Server):
+Run automated smoke verification:
 
 ```bash
-dotnet run -- --verify
+dotnet run -- --verify                  # SQL Server (default)
+dotnet run -- --typ sqlite --verify     # SQLite
 ```
 
 The server uses **stdio** transport for MCP clients such as Cursor.
@@ -59,7 +108,16 @@ A ready-made snippet for your **global** Cursor config (`%USERPROFILE%\.cursor\m
 ```json
 "memorymcp": {
   "command": "dotnet",
-  "args": ["C:\\Git\\MemoryMCP\\bin\\mcp\\MemoryMCP.dll"]
+  "args": ["C:\\Git\\MemoryMCP\\bin\\mcp\\MemoryMCP.dll", "--typ", "sqlite"]
+}
+```
+
+For portable publish output:
+
+```json
+"memorymcp": {
+  "command": "dotnet",
+  "args": ["C:\\Git\\MemoryMCP\\dist\\win-x64\\MemoryMCP.dll", "--typ", "sqlite"]
 }
 ```
 
@@ -201,12 +259,17 @@ This is expected housekeeping, not a one-time migration.
 
 ## Database migrations
 
+Migrations run automatically on startup. SQL Server and SQLite use separate migration chains:
+
 ```bash
-dotnet ef migrations add InitialCreate
-dotnet ef database update
+# SQL Server
+dotnet ef migrations add <Name> --context MemoryDbContext
+
+# SQLite
+dotnet ef migrations add <Name> --context SqliteMemoryDbContext --output-dir Migrations/Sqlite
 ```
 
-Migrations run automatically on startup.
+When changing the schema, add migrations for **both** contexts.
 
 ## Design rules
 

@@ -1,0 +1,4 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+WORKDIR /app
+COPY dist/linux-x64/ .
+ENTRYPOINT ["dotnet", "MemoryMCP.dll", "--typ", "sqlite"]

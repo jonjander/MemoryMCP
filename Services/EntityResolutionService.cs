@@ -119,7 +119,12 @@ public class EntityResolutionService(MemoryDbContext db)
             }
             else
             {
-                link.EntityId = targetEntityId;
+                db.MemoryEntities.Remove(link);
+                db.MemoryEntities.Add(new MemoryEntity
+                {
+                    MemoryId = link.MemoryId,
+                    EntityId = targetEntityId
+                });
                 memoriesMoved++;
             }
         }

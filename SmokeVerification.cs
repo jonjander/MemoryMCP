@@ -58,7 +58,10 @@ public static class SmokeVerification
             throw new InvalidOperationException("Entity graph failed.");
 
         var duplicatePerson = await entityService.CreateEntityAsync("Person", "Maja Duplicate");
-        await memoryStore.LinkMemoryEntityAsync(bundle.MemoryId, duplicatePerson.Id);
+        await memoryStore.StoreBundleAsync(new StoreMemoryBundleInput(
+            Raw: "Memory linked only to duplicate entity for merge smoke test.",
+            Entities: [new BundleEntityInput("duponly", "Person", "Maja Duplicate")],
+            EntityLinks: ["duponly"]));
         var mergeResult = await entityService.MergeEntitiesAsync(
             duplicatePerson.Id,
             bundle.EntityIds["maja"],

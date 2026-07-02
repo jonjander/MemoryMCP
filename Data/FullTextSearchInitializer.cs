@@ -9,6 +9,9 @@ public static class FullTextSearchInitializer
 
     public static async Task EnsureAsync(MemoryDbContext db, CancellationToken cancellationToken = default)
     {
+        if (db.Database.IsSqlite())
+            return;
+
         try
         {
             var catalogExists = await db.Database
