@@ -134,6 +134,16 @@ public static class SmokeVerification
         if (secondDup.ExactRawDuplicateWarning is null || secondDup.ExactRawDuplicateWarning.ExistingCount != 1)
             throw new InvalidOperationException("Second store with same raw should warn about one existing memory.");
 
+        var untokenized = await memoryStore.ListMemoriesAsync(maxTokenCount: 0, take: 200);
+        if (untokenized.TotalMatching < 1 || untokenized.Items.Any(i => i.TokenCount != 0))
+            throw new InvalidOperationException("List memories maxTokenCount=0 failed.");
+
+        var sparse = await memoryStore.ListMemoriesAsync(maxTokenCount: 2, sort: MemoryListSort.TokenCountAsc, take: 50);
+        if (sparse.Items.Count < 1 || sparse.Items.Any(i => i.TokenCount > 2))
+            throw new InvalidOperationException("List memories maxTokenCount=2 failed.");
+        if (sparse.Items[0].TokenCount > sparse.Items[^1].TokenCount)
+            throw new InvalidOperationException("List memories TokenCountAsc sort failed.");
+
         var db = scope.ServiceProvider.GetRequiredService<MemoryDbContext>();
         if (db.Database.IsSqlServer())
             await RunSqliteImportSmokeAsync(scope.ServiceProvider, entityService, searchService);

@@ -28,6 +28,43 @@ public record MemorySummaryDto(
     Guid? SupersedesMemoryId = null,
     Guid? SupersededByMemoryId = null);
 
+public enum MemoryListSort
+{
+    CreatedDesc,
+    TokenCountAsc,
+    TokenCountDesc
+}
+
+public record MemoryListItemDto(
+    string Ref,
+    Guid Id,
+    string Raw,
+    DateTime Created,
+    DateTime? MemoryFrom,
+    MemoryStatus Status,
+    int TokenCount,
+    int EntityCount,
+    Guid? SupersedesMemoryId = null,
+    Guid? SupersededByMemoryId = null);
+
+public record MemoryListFilters(
+    int? MaxTokenCount,
+    int? MinTokenCount,
+    int? ExactTokenCount,
+    int? PercentBelowAverage,
+    DateTime? CreatedSince,
+    bool IncludeInactive,
+    MemoryListSort Sort);
+
+public record ListMemoriesResult(
+    IReadOnlyList<MemoryListItemDto> Items,
+    int Skip,
+    int Take,
+    int TotalMatching,
+    int TotalInScope,
+    double AverageTokenCount,
+    MemoryListFilters Filters);
+
 public record MemoryRevisionDto(
     Guid Id,
     MemoryRevisionType RevisionType,

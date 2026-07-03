@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using MemoryMCP.Models;
 using MemoryMCP.Services;
 using ModelContextProtocol.Server;
 
@@ -32,15 +33,34 @@ public class MemoryTools(MemoryStoreService memoryStore, RefIdResolver refResolv
         return result is null ? JsonResult.Ok(new { error = "Memory not found." }) : JsonResult.Ok(result);
     }
 
-    [McpServerTool, Description("List memories with pagination. Inactive (superseded/invalid/retracted) memories are excluded by default.")]
+    [McpServerTool, Description(
+        "List memories with pagination, per-memory token/entity counts, and optional token-density filters. " +
+        "Inactive memories excluded by default. averageTokenCount is computed over the full in-scope set (before token filters). " +
+        "percentBelowAverage: memories with token count at or below average × (1 − percent/100), e.g. 50 with avg 4 → count ≤ 2. " +
+        "Combine maxTokenCount with percentBelowAverage for tighter slices. Use sort=TokenCountAsc to surface sparse memories first.")]
     public async Task<string> ListMemories(
         [Description("Number of records to skip.")] int skip = 0,
         [Description("Maximum records to return (1-200).")] int take = 50,
         [Description("Only return memories created on or after this UTC timestamp.")] DateTime? createdSince = null,
         [Description("Include superseded, invalid, and retracted memories.")] bool includeInactive = false,
+        [Description("Include memories with at most this many active tokens (inclusive). Use 0 for untokenized, 2 for ≤2 tokens.")] int? maxTokenCount = null,
+        [Description("Include memories with at least this many active tokens (inclusive).")] int? minTokenCount = null,
+        [Description("Include only memories with exactly this many active tokens.")] int? exactTokenCount = null,
+        [Description("Include memories with token count ≤ average × (1 − percent/100). 0 = at or below average; 50 = at or below half the average.")] int? percentBelowAverage = null,
+        [Description("Sort order: CreatedDesc (default), TokenCountAsc, TokenCountDesc.")] MemoryListSort sort = MemoryListSort.CreatedDesc,
         CancellationToken cancellationToken = default)
     {
-        var result = await memoryStore.ListMemoriesAsync(skip, take, createdSince, includeInactive, cancellationToken);
+        var result = await memoryStore.ListMemoriesAsync(
+            skip,
+            take,
+            createdSince,
+            includeInactive,
+            maxTokenCount,
+            minTokenCount,
+            exactTokenCount,
+            percentBelowAverage,
+            sort,
+            cancellationToken);
         return JsonResult.Ok(result);
     }
 

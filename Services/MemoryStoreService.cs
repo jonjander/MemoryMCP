@@ -49,26 +49,88 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         return ToDetail(memory, relationships);
     }
 
-    public async Task<IReadOnlyList<MemorySummaryDto>> ListMemoriesAsync(
+    public async Task<ListMemoriesResult> ListMemoriesAsync(
         int skip = 0,
         int take = 50,
         DateTime? createdSince = null,
         bool includeInactive = false,
+        int? maxTokenCount = null,
+        int? minTokenCount = null,
+        int? exactTokenCount = null,
+        int? percentBelowAverage = null,
+        MemoryListSort sort = MemoryListSort.CreatedDesc,
         CancellationToken cancellationToken = default)
     {
         take = Math.Clamp(take, 1, 200);
         skip = Math.Max(skip, 0);
 
-        var query = db.Memories.AsNoTracking().WhereActive(includeInactive);
-        if (createdSince.HasValue)
-            query = query.Where(m => m.Created >= createdSince.Value);
+        if (percentBelowAverage is < 0 or > 100)
+            throw new InvalidOperationException("percentBelowAverage must be between 0 and 100.");
 
-        var memories = await query
-            .OrderByDescending(m => m.Created)
+        var baseQuery = db.Memories.AsNoTracking().WhereActive(includeInactive);
+        if (createdSince.HasValue)
+            baseQuery = baseQuery.Where(m => m.Created >= createdSince.Value);
+
+        var withCounts = baseQuery.Select(m => new
+        {
+            Memory = m,
+            TokenCount = m.Tokens.Count(mt => mt.Token.Status == TokenStatus.Active),
+            EntityCount = m.Entities.Count()
+        });
+
+        var totalInScope = await withCounts.CountAsync(cancellationToken);
+        var averageTokenCount = totalInScope == 0
+            ? 0d
+            : await withCounts.AverageAsync(x => (double)x.TokenCount, cancellationToken);
+
+        var filtered = withCounts;
+        if (maxTokenCount.HasValue)
+            filtered = filtered.Where(x => x.TokenCount <= maxTokenCount.Value);
+        if (minTokenCount.HasValue)
+            filtered = filtered.Where(x => x.TokenCount >= minTokenCount.Value);
+        if (exactTokenCount.HasValue)
+            filtered = filtered.Where(x => x.TokenCount == exactTokenCount.Value);
+        if (percentBelowAverage.HasValue)
+        {
+            var threshold = averageTokenCount * (1.0 - percentBelowAverage.Value / 100.0);
+            filtered = filtered.Where(x => x.TokenCount <= threshold);
+        }
+
+        var totalMatching = await filtered.CountAsync(cancellationToken);
+
+        var ordered = sort switch
+        {
+            MemoryListSort.TokenCountAsc => filtered
+                .OrderBy(x => x.TokenCount)
+                .ThenByDescending(x => x.Memory.Created),
+            MemoryListSort.TokenCountDesc => filtered
+                .OrderByDescending(x => x.TokenCount)
+                .ThenByDescending(x => x.Memory.Created),
+            _ => filtered.OrderByDescending(x => x.Memory.Created)
+        };
+
+        var page = await ordered
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
-        return memories.Select(ToSummary).ToList();
+
+        var filters = new MemoryListFilters(
+            maxTokenCount,
+            minTokenCount,
+            exactTokenCount,
+            percentBelowAverage,
+            createdSince,
+            includeInactive,
+            sort);
+
+        return new ListMemoriesResult(
+            page.Select(x => ModelMappers.ToListItem(x.Memory, x.TokenCount, x.EntityCount)).ToList(),
+            skip,
+            take,
+            totalMatching,
+            totalInScope,
+            averageTokenCount,
+            filters);
     }
 
     public async Task<MemorySummaryDto> UpdateMemoryFromAsync(

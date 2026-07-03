@@ -33,6 +33,15 @@ public class SqliteImportService(
         public List<string> Warnings { get; } = [];
     }
 
+    private sealed record MemorySupersedeLink(
+        Guid MemoryId,
+        Guid? SupersedesMemoryId,
+        Guid? SupersededByMemoryId);
+
+    private sealed record AnalyzeFileResult(
+        FileCounters Counters,
+        IReadOnlyList<MemorySupersedeLink> SupersedeLinks);
+
     public async Task<SqliteImportPreviewResult> PreviewAsync(
         SqliteImportOptions options,
         CancellationToken cancellationToken = default)
@@ -46,8 +55,8 @@ public class SqliteImportService(
             await using var sourceDb = CreateReadOnlySourceContext(path);
             await ValidateSourceSchemaAsync(sourceDb, path, cancellationToken);
             var snapshot = await LoadSourceSnapshotAsync(sourceDb, cancellationToken);
-            var counters = await AnalyzeFileAsync(snapshot, options, dryRun: true, cancellationToken);
-            filePreviews.Add(ToFilePreview(path, counters));
+            var analysis = await AnalyzeFileAsync(snapshot, options, dryRun: true, cancellationToken);
+            filePreviews.Add(ToFilePreview(path, analysis.Counters));
         }
 
         return new SqliteImportPreviewResult(filePreviews, SumFilePreviews(filePreviews));
@@ -72,10 +81,12 @@ public class SqliteImportService(
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             try
             {
-                var counters = await AnalyzeFileAsync(snapshot, options, dryRun: false, cancellationToken);
+                var analysis = await AnalyzeFileAsync(snapshot, options, dryRun: false, cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+                await ApplyMemorySupersedeLinksAsync(analysis.SupersedeLinks, cancellationToken);
                 await db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                fileResults.Add(ToFileResult(path, counters));
+                fileResults.Add(ToFileResult(path, analysis.Counters));
             }
             catch
             {
@@ -163,13 +174,14 @@ public class SqliteImportService(
         return new SourceSnapshot(entities, tokens, memories, memoryEntities, memoryTokens, relationships);
     }
 
-    private async Task<FileCounters> AnalyzeFileAsync(
+    private async Task<AnalyzeFileResult> AnalyzeFileAsync(
         SourceSnapshot snapshot,
         SqliteImportOptions options,
         bool dryRun,
         CancellationToken cancellationToken)
     {
         var counters = new FileCounters();
+        var supersedeLinks = new List<MemorySupersedeLink>();
         var entityById = snapshot.Entities.ToDictionary(e => e.Id);
         counters.MergedEntitiesInSource = snapshot.Entities.Count(e => e.Status == EntityStatus.Merged);
         if (counters.MergedEntitiesInSource > 0)
@@ -227,18 +239,18 @@ public class SqliteImportService(
                 if (!memoryMap.TryGetValue(src.Id, out var newId))
                     continue;
 
-                var memory = db.Memories.Local.First(m => m.Id == newId);
-                if (src.SupersedesMemoryId.HasValue &&
-                    memoryMap.TryGetValue(src.SupersedesMemoryId.Value, out var supersedesId))
-                {
-                    memory.SupersedesMemoryId = supersedesId;
-                }
+                Guid? supersedesId = src.SupersedesMemoryId.HasValue &&
+                                     memoryMap.TryGetValue(src.SupersedesMemoryId.Value, out var mappedSupersedes)
+                    ? mappedSupersedes
+                    : null;
 
-                if (src.SupersededByMemoryId.HasValue &&
-                    memoryMap.TryGetValue(src.SupersededByMemoryId.Value, out var supersededById))
-                {
-                    memory.SupersededByMemoryId = supersededById;
-                }
+                Guid? supersededById = src.SupersededByMemoryId.HasValue &&
+                                       memoryMap.TryGetValue(src.SupersededByMemoryId.Value, out var mappedSupersededBy)
+                    ? mappedSupersededBy
+                    : null;
+
+                if (supersedesId.HasValue || supersededById.HasValue)
+                    supersedeLinks.Add(new MemorySupersedeLink(newId, supersedesId, supersededById));
             }
         }
         else
@@ -363,7 +375,22 @@ public class SqliteImportService(
             }
         }
 
-        return counters;
+        return new AnalyzeFileResult(counters, supersedeLinks);
+    }
+
+    private async Task ApplyMemorySupersedeLinksAsync(
+        IReadOnlyList<MemorySupersedeLink> links,
+        CancellationToken cancellationToken)
+    {
+        foreach (var link in links)
+        {
+            var memory = await db.Memories.FirstOrDefaultAsync(m => m.Id == link.MemoryId, cancellationToken);
+            if (memory is null)
+                continue;
+
+            memory.SupersedesMemoryId = link.SupersedesMemoryId;
+            memory.SupersededByMemoryId = link.SupersededByMemoryId;
+        }
     }
 
     private async Task<IReadOnlyList<Memory>> DetermineMemoriesToImportAsync(

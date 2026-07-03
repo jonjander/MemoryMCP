@@ -18,6 +18,19 @@ public static class ModelMappers
             memory.SupersedesMemoryId,
             memory.SupersededByMemoryId);
 
+    public static MemoryListItemDto ToListItem(Memory memory, int tokenCount, int entityCount) =>
+        new(
+            memory.Ref ?? string.Empty,
+            memory.Id,
+            memory.Raw,
+            memory.Created,
+            memory.MemoryFrom,
+            memory.Status,
+            tokenCount,
+            entityCount,
+            memory.SupersedesMemoryId,
+            memory.SupersededByMemoryId);
+
     public static TokenSummaryDto ToSummary(Token token) =>
         new(
             token.Ref ?? string.Empty,
