@@ -31,7 +31,10 @@ public class BundleTools(MemoryStoreService memoryStore)
             reuseTokens);
 
         var result = await memoryStore.StoreBundleAsync(input, cancellationToken);
-        return JsonResult.OkWithNextSteps(result, AgentGuidance.AfterStoreBundleSteps);
+        var steps = JsonResult.MergeNextSteps(
+            AgentGuidance.AfterStoreBundleSteps,
+            AgentGuidance.StepsForExactRawDuplicate(result.ExactRawDuplicateWarning));
+        return JsonResult.OkWithNextSteps(result, steps);
     }
 
     [McpServerTool, Description(
@@ -45,7 +48,10 @@ public class BundleTools(MemoryStoreService memoryStore)
     {
         var bundles = McpJson.DeserializeList<StoreMemoryBundleInput>(bundlesJson, "bundlesJson");
         var result = await memoryStore.StoreBundlesAsync(bundles, cancellationToken);
-        return JsonResult.OkWithNextSteps(result, AgentGuidance.AfterStoreBundlesSteps);
+        var steps = JsonResult.MergeNextSteps(
+            AgentGuidance.AfterStoreBundlesSteps,
+            AgentGuidance.StepsForBatchExactRawDuplicates(result));
+        return JsonResult.OkWithNextSteps(result, steps);
     }
 
     private static IReadOnlyList<T>? DeserializeList<T>(string? json)

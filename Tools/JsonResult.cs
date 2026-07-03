@@ -16,4 +16,11 @@ internal static class JsonResult
 
     public static string OkWithNextSteps(object value, IReadOnlyList<string> nextSteps) =>
         JsonSerializer.Serialize(new { result = value, nextSteps }, Options);
+
+    public static IReadOnlyList<string> MergeNextSteps(
+        IReadOnlyList<string> baseSteps,
+        IReadOnlyList<string>? additionalSteps) =>
+        additionalSteps is null || additionalSteps.Count == 0
+            ? baseSteps
+            : baseSteps.Concat(additionalSteps).ToList();
 }

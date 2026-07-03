@@ -1,5 +1,7 @@
 namespace MemoryMCP;
 
+using MemoryMCP.Models;
+
 /// <summary>
 /// Agent workflow and usage guidance exposed via server instructions, MCP resources, and the guide tool.
 /// </summary>
@@ -261,12 +263,51 @@ public static class AgentGuidance
       "For many tokens on existing memories, prefer create_and_link_tokens instead of per-memory bundle calls."
   ];
 
+  public static IReadOnlyList<string> AfterSqliteImportPreviewSteps =>
+  [
+      "Review entitiesNew/tokensNew vs reused counts and warnings per file.",
+      "If memoriesSkippedDuplicateRaw is high, source data may already be in SQL Server.",
+      "When satisfied, run import_sqlite_database with the same sourcePathsJson and flags.",
+      "After import, run list_token_properties if source had inconsistent property names."
+  ];
+
+  public static IReadOnlyList<string> AfterSqliteImportSteps =>
+  [
+      "Verify with search_memories_by_entity or get_memory on imported content.",
+      "Re-importing the same files skips duplicate Raw by default (skipDuplicateRaw=true).",
+      "Use merge_token_properties or rename_token_property to normalize vocabulary if needed.",
+      "Entity/token dedup is deterministic on (Type,Name) and (Property,Type,SearchValue) — not AI-based."
+  ];
+
   public static IReadOnlyList<string> AfterCreateMemorySteps =>
   [
       "You stored raw text only — no entities or tokens were created.",
       "For new observations prefer store_memory_bundle (see start_here). Do not ask the user; extract entities and tokens from the text.",
       "To fix this memory: create_entity, create_token, link_memory_entity, link_memory_token — or store a new bundle instead."
   ];
+
+  public static IReadOnlyList<string> AfterExactRawDuplicateWarningSteps =>
+  [
+      "exactRawDuplicateWarning in the response — same raw text already exists on other active memories.",
+      "This is allowed (e.g. same sentence, different context/tokens) but often means an accidental double-store.",
+      "Compare get_memory on each existingMemories ref vs the new memoryRef — entities and tokens should differ if intentional.",
+      "If duplicates are accidental: keep the best copy and invalidate_memory(status=Invalid, note='duplicate raw') on the rest."
+  ];
+
+  public static IReadOnlyList<string> StepsForExactRawDuplicate(ExactRawDuplicateWarning? warning) =>
+      warning is null ? [] : AfterExactRawDuplicateWarningSteps;
+
+  public static IReadOnlyList<string> StepsForBatchExactRawDuplicates(StoreMemoryBundlesResult result)
+  {
+      if (!result.Results.Any(r => r.Result.ExactRawDuplicateWarning is not null))
+          return [];
+
+      return
+      [
+          "One or more bundles have exactRawDuplicateWarning — check result.results[].result.exactRawDuplicateWarning.",
+          ..AfterExactRawDuplicateWarningSteps
+      ];
+  }
 
   private static string NormalizeTopic(string? topic)
   {

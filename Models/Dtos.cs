@@ -45,11 +45,21 @@ public record MemoryHistoryDto(
     IReadOnlyList<MemoryRevisionDto> Revisions,
     IReadOnlyList<MemorySummaryDto> CorrectionChain);
 
+public record ExactRawDuplicateWarning(
+    string Message,
+    int ExistingCount,
+    IReadOnlyList<MemorySummaryDto> ExistingMemories);
+
+public record CreateMemoryResult(
+    MemorySummaryDto Memory,
+    ExactRawDuplicateWarning? ExactRawDuplicateWarning);
+
 public record ReviseMemoryResultDto(
     Guid OriginalMemoryId,
     Guid SuccessorMemoryId,
     MemorySummaryDto Original,
-    MemorySummaryDto Successor);
+    MemorySummaryDto Successor,
+    ExactRawDuplicateWarning? ExactRawDuplicateWarning = null);
 
 public record EntitySummaryDto(
     string Ref,
@@ -251,7 +261,8 @@ public record StoreMemoryBundleResult(
     IReadOnlyDictionary<string, Guid> EntityIds,
     IReadOnlyList<string> TokenRefs,
     IReadOnlyList<Guid> TokenIds,
-    IReadOnlyList<Guid> RelationshipIds);
+    IReadOnlyList<Guid> RelationshipIds,
+    ExactRawDuplicateWarning? ExactRawDuplicateWarning = null);
 
 public record StoreMemoryBundleBatchItemResult(
     int Index,
@@ -300,3 +311,51 @@ public record CreateAndLinkTokenResultItem(
 public record CreateAndLinkTokensResult(
     int Count,
     IReadOnlyList<CreateAndLinkTokenResultItem> Results);
+
+public record SqliteImportOptions(
+    IReadOnlyList<string> SourcePaths,
+    bool ReuseEntities = true,
+    bool ReuseTokens = true,
+    bool SkipDuplicateRaw = true);
+
+public record SqliteImportTotals(
+    int EntitiesReused,
+    int EntitiesNew,
+    int TokensReused,
+    int TokensNew,
+    int MemoriesImported,
+    int MemoriesSkippedDuplicateRaw,
+    int RelationshipsImported,
+    int RelationshipsSkipped);
+
+public record SqliteImportFilePreview(
+    string SourcePath,
+    int EntitiesReused,
+    int EntitiesNew,
+    int MergedEntitiesInSource,
+    int TokensReused,
+    int TokensNew,
+    int MemoriesImported,
+    int MemoriesSkippedDuplicateRaw,
+    int RelationshipsImported,
+    int RelationshipsSkipped,
+    IReadOnlyList<string> Warnings);
+
+public record SqliteImportPreviewResult(
+    IReadOnlyList<SqliteImportFilePreview> Files,
+    SqliteImportTotals Totals);
+
+public record SqliteImportFileResult(
+    string SourcePath,
+    int EntitiesReused,
+    int EntitiesNew,
+    int TokensReused,
+    int TokensNew,
+    int MemoriesImported,
+    int MemoriesSkippedDuplicateRaw,
+    int RelationshipsImported,
+    int RelationshipsSkipped);
+
+public record SqliteImportResult(
+    IReadOnlyList<SqliteImportFileResult> Files,
+    SqliteImportTotals Totals);

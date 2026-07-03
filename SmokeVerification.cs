@@ -1,6 +1,8 @@
 using MemoryMCP;
+using MemoryMCP.Data;
 using MemoryMCP.Models;
 using MemoryMCP.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 public static class SmokeVerification
@@ -117,9 +119,101 @@ public static class SmokeVerification
         if (byRef.Count < 2)
             throw new InvalidOperationException("Search by entity Ref failed.");
 
+        var duplicateRaw = "[smoke] Exact duplicate raw warning test.";
+        var firstDup = await memoryStore.StoreBundleAsync(new StoreMemoryBundleInput(
+            Raw: duplicateRaw,
+            Entities: [new BundleEntityInput("x", "Person", "DupTestA")],
+            EntityLinks: ["x"]));
+        if (firstDup.ExactRawDuplicateWarning is not null)
+            throw new InvalidOperationException("First store should not warn about duplicate raw.");
+
+        var secondDup = await memoryStore.StoreBundleAsync(new StoreMemoryBundleInput(
+            Raw: duplicateRaw,
+            Entities: [new BundleEntityInput("y", "Person", "DupTestB")],
+            EntityLinks: ["y"]));
+        if (secondDup.ExactRawDuplicateWarning is null || secondDup.ExactRawDuplicateWarning.ExistingCount != 1)
+            throw new InvalidOperationException("Second store with same raw should warn about one existing memory.");
+
+        var db = scope.ServiceProvider.GetRequiredService<MemoryDbContext>();
+        if (db.Database.IsSqlServer())
+            await RunSqliteImportSmokeAsync(scope.ServiceProvider, entityService, searchService);
+
         await TestDataCleanup.RunAsync(services);
 
         Console.Error.WriteLine("Smoke verification passed (test data cleaned up).");
         return 0;
+    }
+
+    private static async Task RunSqliteImportSmokeAsync(
+        IServiceProvider scopedServices,
+        EntityResolutionService entityService,
+        SearchService searchService)
+    {
+        var importService = scopedServices.GetRequiredService<SqliteImportService>();
+        var tempPath = await CreateImportSourceSqliteAsync();
+
+        try
+        {
+            await entityService.CreateEntityAsync("Person", "Alva");
+
+            var preview = await importService.PreviewAsync(new SqliteImportOptions([tempPath]));
+            if (preview.Totals.EntitiesReused < 1)
+                throw new InvalidOperationException("SQLite import preview did not detect reusable entity.");
+
+            if (preview.Totals.MemoriesImported != 2)
+                throw new InvalidOperationException("SQLite import preview expected 2 memories to import.");
+
+            var firstImport = await importService.ImportAsync(new SqliteImportOptions([tempPath]));
+            if (firstImport.Totals.MemoriesImported != 2)
+                throw new InvalidOperationException("SQLite import did not import expected memories.");
+
+            if (firstImport.Totals.TokensReused < 1)
+                throw new InvalidOperationException("SQLite import did not reuse shared Likes=pasta token.");
+
+            var byToken = await searchService.SearchMemoriesByTokenAsync("Likes", stringValue: "pasta");
+            if (byToken.Count < 2)
+                throw new InvalidOperationException("Imported memories not found by shared token.");
+
+            var secondImport = await importService.ImportAsync(new SqliteImportOptions([tempPath]));
+            if (secondImport.Totals.MemoriesSkippedDuplicateRaw != 2)
+                throw new InvalidOperationException("Second SQLite import did not skip duplicate Raw memories.");
+
+            if (secondImport.Totals.MemoriesImported != 0)
+                throw new InvalidOperationException("Second SQLite import should not add new memories.");
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+    }
+
+    private static async Task<string> CreateImportSourceSqliteAsync()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"memorymcp-import-smoke-{Guid.NewGuid()}.db");
+        var options = new DbContextOptionsBuilder<SqliteMemoryDbContext>()
+            .UseSqlite($"Data Source={tempPath}")
+            .Options;
+
+        await using var sqliteDb = new SqliteMemoryDbContext(options);
+        await sqliteDb.Database.MigrateAsync();
+
+        var refResolver = new RefIdResolver(sqliteDb);
+        var store = new MemoryStoreService(sqliteDb, refResolver);
+
+        await store.StoreBundleAsync(new StoreMemoryBundleInput(
+            Raw: "[import-smoke] Alva likes pasta.",
+            Entities: [new BundleEntityInput("alva", "Person", "Alva")],
+            Tokens: [new BundleTokenInput("Likes", PropertyType.String, StringValue: "pasta")],
+            EntityLinks: ["alva"]));
+
+        await store.StoreBundleAsync(new StoreMemoryBundleInput(
+            Raw: "[import-smoke] Leo likes pasta.",
+            Entities: [new BundleEntityInput("leo", "Person", "Leo")],
+            Tokens: [new BundleTokenInput("Likes", PropertyType.String, StringValue: "pasta")],
+            EntityLinks: ["leo"],
+            ReuseTokens: true));
+
+        return tempPath;
     }
 }

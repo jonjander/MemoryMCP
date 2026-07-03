@@ -62,6 +62,7 @@ builder.Services.AddScoped<EntityResolutionService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<RelationshipService>();
 builder.Services.AddScoped<SearchService>();
+builder.Services.AddScoped<SqliteImportService>();
 
 builder.Services
     .AddMcpServer(options => options.ServerInstructions = AgentGuidance.BuildServerInstructions(startupOptions.WhoAmI))
@@ -73,6 +74,7 @@ builder.Services
     .WithTools<RelationshipTools>()
     .WithTools<SearchTools>()
     .WithTools<BundleTools>()
+    .WithTools<ImportTools>()
     .WithResources<GuideResources>();
 
 if (hostArgs.Contains("--list-tools"))
@@ -115,6 +117,11 @@ if (storeBundleIndex >= 0)
     }
 
     return await StoreBundleCli.RunAsync(app.Services, hostArgs[storeBundleIndex + 1]);
+}
+
+if (ImportSqliteCli.TryParse(hostArgs, out var importPaths, out var importPreview))
+{
+    return await ImportSqliteCli.RunAsync(app.Services, importPaths, importPreview);
 }
 
 await app.RunAsync();

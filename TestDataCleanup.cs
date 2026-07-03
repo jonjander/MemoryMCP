@@ -16,7 +16,10 @@ public static class TestDataCleanup
         "Batch wine A from 1990.",
         "Batch wine B from 2001.",
         "[smoke] Batch wine A from 1990.",
-        "[smoke] Batch wine B from 2001."
+        "[smoke] Batch wine B from 2001.",
+        "[import-smoke] Alva likes pasta.",
+        "[import-smoke] Leo likes pasta.",
+        "[smoke] Exact duplicate raw warning test."
     ];
 
     private static readonly string[] SmokeEntityNames =
@@ -26,7 +29,11 @@ public static class TestDataCleanup
         "David-sword",
         "Japan-sword",
         "Batch A",
-        "Batch B"
+        "Batch B",
+        "Alva",
+        "Leo",
+        "DupTestA",
+        "DupTestB"
     ];
 
     public static async Task<int> RunAsync(IServiceProvider services)
@@ -90,7 +97,7 @@ public static class TestDataCleanup
                 (t.Property == "Age" && t.IntValue == 15) ||
                 (t.Property == "Year" && (t.IntValue == 2011 || t.IntValue == 1990 || t.IntValue == 2001)) ||
                 (t.Property == "Color" && (t.StringValue == "Blue" || t.StringValue == "Red")) ||
-                (t.Property == "Likes" && t.StringValue == "cheese"))
+                (t.Property == "Likes" && (t.StringValue == "cheese" || t.StringValue == "pasta")))
             .ToListAsync();
         if (orphanSmokeTokens.Count > 0)
         {

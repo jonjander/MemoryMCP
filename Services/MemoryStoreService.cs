@@ -6,8 +6,10 @@ namespace MemoryMCP.Services;
 
 public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
 {
-    public async Task<MemorySummaryDto> CreateMemoryAsync(string raw, DateTime? memoryFrom = null, CancellationToken cancellationToken = default)
+    public async Task<CreateMemoryResult> CreateMemoryAsync(string raw, DateTime? memoryFrom = null, CancellationToken cancellationToken = default)
     {
+        var duplicateWarning = await GetExactRawDuplicateWarningAsync(raw, [], cancellationToken);
+
         var memory = new Memory
         {
             Id = Guid.NewGuid(),
@@ -19,7 +21,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
 
         db.Memories.Add(memory);
         await db.SaveChangesAsync(cancellationToken);
-        return ToSummary(memory);
+        return new CreateMemoryResult(ToSummary(memory), duplicateWarning);
     }
 
     public async Task<MemoryDetailDto?> GetMemoryAsync(Guid id, CancellationToken cancellationToken = default)
@@ -155,6 +157,8 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         if (original.Status == MemoryStatus.Superseded)
             throw new InvalidOperationException("Memory is already superseded.");
 
+        var duplicateWarning = await GetExactRawDuplicateWarningAsync(correctedRaw, [], cancellationToken);
+
         var successor = new Memory
         {
             Id = Guid.NewGuid(),
@@ -215,7 +219,8 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
             original.Id,
             successor.Id,
             ToSummary(original),
-            ToSummary(successor));
+            ToSummary(successor),
+            duplicateWarning);
     }
 
     public async Task<MemoryHistoryDto?> GetMemoryHistoryAsync(Guid id, CancellationToken cancellationToken = default)
@@ -319,7 +324,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
     public async Task<StoreMemoryBundleResult> StoreBundleAsync(StoreMemoryBundleInput input, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var core = await StoreBundleCoreAsync(input, cancellationToken);
+        var core = await StoreBundleCoreAsync(input, [], cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var result = await BuildBundleResultAsync(core, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -340,12 +345,14 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
 
         var results = new List<StoreMemoryBundleBatchItemResult>(bundles.Count);
         var cores = new List<BundleCoreResult>(bundles.Count);
+        var rawsInBatch = new List<string>(bundles.Count);
         for (var i = 0; i < bundles.Count; i++)
         {
             try
             {
-                var core = await StoreBundleCoreAsync(bundles[i], cancellationToken);
+                var core = await StoreBundleCoreAsync(bundles[i], rawsInBatch, cancellationToken);
                 cores.Add(core);
+                rawsInBatch.Add(bundles[i].Raw);
             }
             catch (Exception ex)
             {
@@ -395,14 +402,16 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
             core.EntityIds,
             tokenRefs,
             core.TokenIds,
-            core.RelationshipIds);
+            core.RelationshipIds,
+            core.ExactRawDuplicateWarning);
     }
 
     private sealed record BundleCoreResult(
         Guid MemoryId,
         IReadOnlyDictionary<string, Guid> EntityIds,
         IReadOnlyList<Guid> TokenIds,
-        IReadOnlyList<Guid> RelationshipIds);
+        IReadOnlyList<Guid> RelationshipIds,
+        ExactRawDuplicateWarning? ExactRawDuplicateWarning);
 
     public async Task<LinkMemoryTokensResult> LinkMemoryTokensAsync(
         IReadOnlyList<MemoryTokenLinkInput> links,
@@ -567,8 +576,11 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
 
     private async Task<BundleCoreResult> StoreBundleCoreAsync(
         StoreMemoryBundleInput input,
+        IReadOnlyList<string> rawsAddedEarlierInBatch,
         CancellationToken cancellationToken)
     {
+        var duplicateWarning = await GetExactRawDuplicateWarningAsync(input.Raw, rawsAddedEarlierInBatch, cancellationToken);
+
         var memory = new Memory
         {
             Id = Guid.NewGuid(),
@@ -626,7 +638,33 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
             relationshipIds.Add(relationship.Id);
         }
 
-        return new BundleCoreResult(memory.Id, entityIds, tokenIds, relationshipIds);
+        return new BundleCoreResult(memory.Id, entityIds, tokenIds, relationshipIds, duplicateWarning);
+    }
+
+    private async Task<ExactRawDuplicateWarning?> GetExactRawDuplicateWarningAsync(
+        string raw,
+        IReadOnlyList<string> rawsAddedEarlierInBatch,
+        CancellationToken cancellationToken)
+    {
+        var existing = await db.Memories
+            .AsNoTracking()
+            .WhereActive(includeInactive: false)
+            .Where(m => m.Raw == raw)
+            .OrderByDescending(m => m.Created)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+
+        var batchCount = rawsAddedEarlierInBatch.Count(r => r == raw);
+        var existingCount = existing.Count + batchCount;
+        if (existingCount == 0)
+            return null;
+
+        var memoryWord = existingCount == 1 ? "memory" : "memories";
+        return new ExactRawDuplicateWarning(
+            $"Exact duplicate raw text: {existingCount} active {memoryWord} already have this raw verbatim. " +
+            "Store allowed — compare entities/tokens on each copy; invalidate accidental duplicates with invalidate_memory.",
+            existingCount,
+            existing.Select(ToSummary).ToList());
     }
 
     private static void EnsureMutable(Memory memory)
