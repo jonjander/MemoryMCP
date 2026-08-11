@@ -8,22 +8,35 @@ public static class ModelMappers
         new(entity.Ref ?? string.Empty, entity.Id, entity.Type, entity.Name, memoryCount, entity.Status, entity.MergedIntoEntityId);
 
     public static MemorySummaryDto ToSummary(Memory memory) =>
-        new(
+        ToSummaryPreview(memory);
+
+    public static MemorySummaryDto ToSummaryPreview(Memory memory, int previewChars = MemoryLimits.PreviewChars)
+    {
+        var (preview, length, truncated) = RawTextHelper.ToPreview(memory.Raw, previewChars);
+        return new MemorySummaryDto(
             memory.Ref ?? string.Empty,
             memory.Id,
-            memory.Raw,
+            preview,
             memory.Created,
             memory.MemoryFrom,
             memory.Status,
             memory.SupersedesMemoryId,
             memory.SupersededByMemoryId,
-            memory.Partition);
+            memory.Partition,
+            length,
+            truncated);
+    }
 
     public static MemoryListItemDto ToListItem(Memory memory, int tokenCount, int entityCount) =>
-        new(
+        ToListItemPreview(memory, tokenCount, entityCount);
+
+    public static MemoryListItemDto ToListItemPreview(Memory memory, int tokenCount, int entityCount, int previewChars = MemoryLimits.PreviewChars)
+    {
+        var (preview, length, truncated) = RawTextHelper.ToPreview(memory.Raw, previewChars);
+        return new MemoryListItemDto(
             memory.Ref ?? string.Empty,
             memory.Id,
-            memory.Raw,
+            preview,
             memory.Created,
             memory.MemoryFrom,
             memory.Status,
@@ -31,7 +44,10 @@ public static class ModelMappers
             entityCount,
             memory.SupersedesMemoryId,
             memory.SupersededByMemoryId,
-            memory.Partition);
+            memory.Partition,
+            length,
+            truncated);
+    }
 
     public static TokenSummaryDto ToSummary(Token token) =>
         new(

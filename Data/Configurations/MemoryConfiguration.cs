@@ -9,7 +9,7 @@ public class MemoryConfiguration : IEntityTypeConfiguration<Memory>
     {
         builder.ToTable("Memories");
         builder.HasKey(m => m.Id);
-        builder.Property(m => m.Raw).IsRequired().HasMaxLength(8000);
+        builder.Property(m => m.Raw).IsRequired();
         builder.Property(m => m.Ref).HasMaxLength(RefIdGenerator.CharLength);
         builder.HasIndex(m => m.Ref).IsUnique().HasFilter("[Ref] IS NOT NULL");
         builder.Property(m => m.Partition).HasMaxLength(64);

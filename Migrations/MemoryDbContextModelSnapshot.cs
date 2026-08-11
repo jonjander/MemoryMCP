@@ -31,14 +31,14 @@ namespace MemoryMCP.Migrations
                     b.Property<Guid?>("MergedIntoEntityId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("Ref")
-                        .HasMaxLength(8)
-                        .HasColumnType("nvarchar(8)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("Ref")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -70,6 +70,45 @@ namespace MemoryMCP.Migrations
                         .HasFilter("[Status] = 0");
 
                     b.ToTable("Entities", (string)null);
+                });
+
+            modelBuilder.Entity("MemoryMCP.EntityRelationship", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<float>("Confidence")
+                        .HasColumnType("real");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("FromEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("MemoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RelationType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<Guid>("ToEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MemoryId");
+
+                    b.HasIndex("FromEntityId", "RelationType");
+
+                    b.HasIndex("ToEntityId", "RelationType");
+
+                    b.HasIndex("FromEntityId", "ToEntityId", "RelationType");
+
+                    b.ToTable("EntityRelationships", (string)null);
                 });
 
             modelBuilder.Entity("MemoryMCP.EntityRevision", b =>
@@ -125,45 +164,6 @@ namespace MemoryMCP.Migrations
                     b.ToTable("EntityRevisions", (string)null);
                 });
 
-            modelBuilder.Entity("MemoryMCP.EntityRelationship", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<float>("Confidence")
-                        .HasColumnType("real");
-
-                    b.Property<DateTime>("Created")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("FromEntityId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("MemoryId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("RelationType")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<Guid>("ToEntityId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MemoryId");
-
-                    b.HasIndex("FromEntityId", "RelationType");
-
-                    b.HasIndex("ToEntityId", "RelationType");
-
-                    b.HasIndex("FromEntityId", "ToEntityId", "RelationType");
-
-                    b.ToTable("EntityRelationships", (string)null);
-                });
-
             modelBuilder.Entity("MemoryMCP.Memory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -182,7 +182,6 @@ namespace MemoryMCP.Migrations
 
                     b.Property<string>("Raw")
                         .IsRequired()
-                        .HasMaxLength(8000)
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Ref")
@@ -226,6 +225,21 @@ namespace MemoryMCP.Migrations
                     b.ToTable("Memories", (string)null);
                 });
 
+            modelBuilder.Entity("MemoryMCP.MemoryEntity", b =>
+                {
+                    b.Property<Guid>("MemoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("MemoryId", "EntityId");
+
+                    b.HasIndex("EntityId");
+
+                    b.ToTable("MemoryEntities", (string)null);
+                });
+
             modelBuilder.Entity("MemoryMCP.MemoryRevision", b =>
                 {
                     b.Property<Guid>("Id")
@@ -257,12 +271,11 @@ namespace MemoryMCP.Migrations
                     b.Property<int>("RevisionType")
                         .HasColumnType("int");
 
-                    b.Property<string>("SuccessorRaw")
-                        .HasMaxLength(8000)
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<Guid?>("SuccessorMemoryId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SuccessorRaw")
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -271,21 +284,6 @@ namespace MemoryMCP.Migrations
                     b.HasIndex("MemoryId");
 
                     b.ToTable("MemoryRevisions", (string)null);
-                });
-
-            modelBuilder.Entity("MemoryMCP.MemoryEntity", b =>
-                {
-                    b.Property<Guid>("MemoryId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("EntityId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("MemoryId", "EntityId");
-
-                    b.HasIndex("EntityId");
-
-                    b.ToTable("MemoryEntities", (string)null);
                 });
 
             modelBuilder.Entity("MemoryMCP.MemoryToken", b =>
@@ -372,14 +370,6 @@ namespace MemoryMCP.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Property", "IntValue");
-
-                    b.HasIndex("Property", "SearchValue");
-
-                    b.HasIndex("Property", "StringValue");
-
-                    b.HasIndex("Property", "Type", "SearchValue");
-
                     b.HasIndex("Ref")
                         .IsUnique()
                         .HasFilter("[Ref] IS NOT NULL");
@@ -389,6 +379,14 @@ namespace MemoryMCP.Migrations
                     b.HasIndex("SupersededByTokenId");
 
                     b.HasIndex("SupersedesTokenId");
+
+                    b.HasIndex("Property", "IntValue");
+
+                    b.HasIndex("Property", "SearchValue");
+
+                    b.HasIndex("Property", "StringValue");
+
+                    b.HasIndex("Property", "Type", "SearchValue");
 
                     b.ToTable("Tokens", (string)null);
                 });
@@ -402,12 +400,12 @@ namespace MemoryMCP.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("datetime2");
 
+                    b.Property<float?>("NewConfidence")
+                        .HasColumnType("real");
+
                     b.Property<string>("NewProperty")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
-
-                    b.Property<float?>("NewConfidence")
-                        .HasColumnType("real");
 
                     b.Property<string>("NewSearchValue")
                         .HasMaxLength(512)
@@ -426,12 +424,12 @@ namespace MemoryMCP.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<float?>("PreviousConfidence")
+                        .HasColumnType("real");
+
                     b.Property<string>("PreviousProperty")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
-
-                    b.Property<float?>("PreviousConfidence")
-                        .HasColumnType("real");
 
                     b.Property<string>("PreviousSearchValue")
                         .HasMaxLength(512)
@@ -464,6 +462,16 @@ namespace MemoryMCP.Migrations
                     b.ToTable("TokenRevisions", (string)null);
                 });
 
+            modelBuilder.Entity("MemoryMCP.Entity", b =>
+                {
+                    b.HasOne("MemoryMCP.Entity", "MergedIntoEntity")
+                        .WithMany()
+                        .HasForeignKey("MergedIntoEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("MergedIntoEntity");
+                });
+
             modelBuilder.Entity("MemoryMCP.EntityRelationship", b =>
                 {
                     b.HasOne("MemoryMCP.Entity", "FromEntity")
@@ -488,16 +496,6 @@ namespace MemoryMCP.Migrations
                     b.Navigation("Memory");
 
                     b.Navigation("ToEntity");
-                });
-
-            modelBuilder.Entity("MemoryMCP.Entity", b =>
-                {
-                    b.HasOne("MemoryMCP.Entity", "MergedIntoEntity")
-                        .WithMany()
-                        .HasForeignKey("MergedIntoEntityId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("MergedIntoEntity");
                 });
 
             modelBuilder.Entity("MemoryMCP.EntityRevision", b =>
@@ -528,17 +526,6 @@ namespace MemoryMCP.Migrations
                     b.Navigation("SupersedesMemory");
                 });
 
-            modelBuilder.Entity("MemoryMCP.MemoryRevision", b =>
-                {
-                    b.HasOne("MemoryMCP.Memory", "Memory")
-                        .WithMany("Revisions")
-                        .HasForeignKey("MemoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Memory");
-                });
-
             modelBuilder.Entity("MemoryMCP.MemoryEntity", b =>
                 {
                     b.HasOne("MemoryMCP.Entity", "Entity")
@@ -554,6 +541,17 @@ namespace MemoryMCP.Migrations
                         .IsRequired();
 
                     b.Navigation("Entity");
+
+                    b.Navigation("Memory");
+                });
+
+            modelBuilder.Entity("MemoryMCP.MemoryRevision", b =>
+                {
+                    b.HasOne("MemoryMCP.Memory", "Memory")
+                        .WithMany("Revisions")
+                        .HasForeignKey("MemoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Memory");
                 });

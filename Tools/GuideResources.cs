@@ -25,4 +25,8 @@ public class GuideResources(ServerStartupOptions startupOptions)
     [McpServerResource(UriTemplate = "memorymcp://guide/examples", Name = "examples", MimeType = "text/markdown")]
     [Description("store_memory_bundle JSON examples.")]
     public static string ExamplesGuide() => AgentGuidance.GetGuide("examples");
+
+    [McpServerResource(UriTemplate = "memorymcp://guide/bigpayload", Name = "bigpayload", MimeType = "text/markdown")]
+    [Description("Large raw text: file paths for store, previews for search, paging for get_memory.")]
+    public static string BigPayloadGuide() => AgentGuidance.BigPayloadGuide;
 }

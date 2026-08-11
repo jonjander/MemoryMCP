@@ -8,6 +8,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, S
 {
     public async Task<CreateMemoryResult> CreateMemoryAsync(string raw, DateTime? memoryFrom = null, CancellationToken cancellationToken = default)
     {
+        RawTextHelper.ValidateLength(raw);
         var duplicateWarning = await GetExactRawDuplicateWarningAsync(raw, [], cancellationToken);
 
         var memory = new Memory
@@ -25,8 +26,15 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, S
         return new CreateMemoryResult(ToSummary(memory), duplicateWarning);
     }
 
-    public async Task<MemoryDetailDto?> GetMemoryAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<MemoryDetailDto?> GetMemoryAsync(
+        Guid id,
+        int rawOffset = 0,
+        int? rawMaxChars = null,
+        CancellationToken cancellationToken = default)
     {
+        rawOffset = Math.Max(0, rawOffset);
+        var maxChars = rawMaxChars ?? MemoryLimits.DefaultGetMaxChars;
+        maxChars = Math.Clamp(maxChars, 1, MemoryLimits.MaxRawChars);
         var memory = await db.Memories
             .AsNoTracking()
             .InPartition(startupOptions.Partition)
@@ -48,7 +56,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, S
             .Where(r => r.MemoryId == id || entityIds.Contains(r.FromEntityId) || entityIds.Contains(r.ToEntityId))
             .ToListAsync(cancellationToken);
 
-        return ToDetail(memory, relationships);
+        return ToDetail(memory, relationships, rawOffset, maxChars);
     }
 
     public async Task<ListMemoriesResult> ListMemoriesAsync(
@@ -210,6 +218,8 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, S
     {
         if (string.IsNullOrWhiteSpace(correctedRaw))
             throw new InvalidOperationException("Corrected raw text is required.");
+
+        RawTextHelper.ValidateLength(correctedRaw);
 
         var original = await db.Memories
             .InPartition(startupOptions.Partition)
@@ -650,6 +660,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, S
         IReadOnlyList<string> rawsAddedEarlierInBatch,
         CancellationToken cancellationToken)
     {
+        RawTextHelper.ValidateLength(input.Raw);
         var duplicateWarning = await GetExactRawDuplicateWarningAsync(input.Raw, rawsAddedEarlierInBatch, cancellationToken);
 
         var memory = new Memory
@@ -737,7 +748,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, S
             $"Exact duplicate raw text: {existingCount} active {memoryWord} already have this raw verbatim. " +
             "Store allowed — compare entities/tokens on each copy; invalidate accidental duplicates with invalidate_memory.",
             existingCount,
-            existing.Select(ToSummary).ToList());
+            existing.Select(m => ModelMappers.ToSummaryPreview(m)).ToList());
     }
 
     private async Task<Memory> FindMemoryInPartitionAsync(Guid id, CancellationToken cancellationToken) =>
@@ -791,11 +802,17 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, S
         await Task.CompletedTask;
     }
 
-    private static MemoryDetailDto ToDetail(Memory memory, IReadOnlyList<EntityRelationship> relationships) =>
-        new(
+    private static MemoryDetailDto ToDetail(
+        Memory memory,
+        IReadOnlyList<EntityRelationship> relationships,
+        int rawOffset,
+        int rawMaxChars)
+    {
+        var (slice, length, truncated) = RawTextHelper.Slice(memory.Raw, rawOffset, rawMaxChars);
+        return new MemoryDetailDto(
             memory.Ref ?? string.Empty,
             memory.Id,
-            memory.Raw,
+            slice,
             memory.Created,
             memory.Updated,
             memory.MemoryFrom,
@@ -807,9 +824,13 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, S
             memory.Tokens.Select(mt => TokenValueHelper.ToSummary(mt.Token)).ToList(),
             relationships.Select(RelationshipService.ToSummary).ToList(),
             memory.Revisions.OrderByDescending(r => r.Created).Select(ToRevisionDto).ToList(),
-            memory.SupersedesMemory is null ? null : ToSummary(memory.SupersedesMemory),
-            memory.SupersededByMemory is null ? null : ToSummary(memory.SupersededByMemory),
-            memory.Partition);
+            memory.SupersedesMemory is null ? null : ModelMappers.ToSummaryPreview(memory.SupersedesMemory),
+            memory.SupersededByMemory is null ? null : ModelMappers.ToSummaryPreview(memory.SupersededByMemory),
+            memory.Partition,
+            length,
+            truncated,
+            rawOffset);
+    }
 
     private static MemoryRevisionDto ToRevisionDto(MemoryRevision revision) =>
         new(

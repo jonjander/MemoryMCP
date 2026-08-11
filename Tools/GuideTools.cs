@@ -17,10 +17,10 @@ public class GuideTools(ServerStartupOptions startupOptions)
 
     [McpServerTool, Description(
         "Get MemoryMCP workflow and usage guidance. Call start_here first if you are new. " +
-        "Topics: overview (default), start_here, refs, quickstart, store, retrieve, tokens, maintenance, examples. " +
+        "Topics: overview (default), start_here, refs, quickstart, store, retrieve, tokens, maintenance, examples, bigpayload. " +
         "Also available as MCP resources: memorymcp://guide/start, memorymcp://guide/refs, memorymcp://guide/workflow, memorymcp://guide/tokens, memorymcp://guide/examples.")]
     public static string GetMemorymcpGuide(
-        [Description("Guide topic: overview, start_here, refs, quickstart, store, retrieve, tokens, maintenance, examples. Omit for overview.")] string? topic = null)
+        [Description("Guide topic: overview, start_here, refs, quickstart, store, retrieve, tokens, maintenance, examples, bigpayload. Omit for overview.")] string? topic = null)
     {
         return AgentGuidance.GetGuide(topic);
     }

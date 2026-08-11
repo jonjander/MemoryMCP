@@ -17,7 +17,10 @@ public record MemoryDetailDto(
     IReadOnlyList<MemoryRevisionDto> Revisions,
     MemorySummaryDto? SupersedesMemory,
     MemorySummaryDto? SupersededByMemory,
-    string? Partition = null);
+    string? Partition = null,
+    int RawLength = 0,
+    bool RawTruncated = false,
+    int RawOffset = 0);
 
 public record MemorySummaryDto(
     string Ref,
@@ -28,7 +31,9 @@ public record MemorySummaryDto(
     MemoryStatus Status = MemoryStatus.Active,
     Guid? SupersedesMemoryId = null,
     Guid? SupersededByMemoryId = null,
-    string? Partition = null);
+    string? Partition = null,
+    int RawLength = 0,
+    bool RawTruncated = false);
 
 public enum MemoryListSort
 {
@@ -48,7 +53,9 @@ public record MemoryListItemDto(
     int EntityCount,
     Guid? SupersedesMemoryId = null,
     Guid? SupersededByMemoryId = null,
-    string? Partition = null);
+    string? Partition = null,
+    int RawLength = 0,
+    bool RawTruncated = false);
 
 public record MemoryListFilters(
     int? MaxTokenCount,

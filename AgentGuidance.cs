@@ -1,6 +1,7 @@
 namespace MemoryMCP;
 
 using MemoryMCP.Models;
+using MemoryMCP.Services;
 
 /// <summary>
 /// Agent workflow and usage guidance exposed via server instructions, MCP resources, and the guide tool.
@@ -14,6 +15,7 @@ public static class AgentGuidance
       "Relevant fact without save request → you may ask once if they want it in memory; do not auto-save everything. " +
       "Once saving: extract entities and tokens — never ask about Person entity or structure. " +
       "Retrieve: when user asks to recall or when prior knowledge helps — search_* without asking permission. " +
+      "Large raw: use rawPath/bundlePath on store; list/search return raw preview; get_memory pages with rawOffset. " +
       "New agent: call start_here first. Never use create_memory alone for new observations.";
 
   public static string BuildServerInstructions(string? whoAmI, string? partition = null)
@@ -198,6 +200,8 @@ public static class AgentGuidance
       )
       ```
 
+      **Large text (>~2k chars):** write the observation to a UTF-8 file, then pass `rawPath` (or `bundlePath` for a full JSON bundle file) instead of inlining `raw`. The server reads from disk — the model only emits a short path.
+
       Do **not** use `create_memory` alone — it saves raw text without entities or tokens.
 
       ## Example: explicit save order (nobrainer)
@@ -263,7 +267,7 @@ public static class AgentGuidance
 
       ## More help
 
-      - `get_memorymcp_guide` — topics: quickstart, store, retrieve, tokens, maintenance, examples
+      - `get_memorymcp_guide` — topics: quickstart, store, retrieve, tokens, maintenance, examples, bigpayload
       - MCP resources: `memorymcp://guide/start`, `memorymcp://guide/refs`, `memorymcp://guide/workflow`, `memorymcp://guide/tokens`, `memorymcp://guide/examples`
       """;
 
@@ -280,6 +284,7 @@ public static class AgentGuidance
       "quickstart" => Quickstart,
       "start_here" => StartHere,
       "refs" or "ref" or "ids" or "identifiers" => RefIdsGuide,
+      "bigpayload" or "payload" or "large" or "rawpath" => BigPayloadGuide,
       _ => Overview
     };
   }
@@ -346,6 +351,19 @@ public static class AgentGuidance
       ];
   }
 
+  public static IReadOnlyList<string> StepsForTruncatedRaw(MemoryDetailDto detail)
+  {
+      if (!detail.RawTruncated)
+          return [];
+
+      var nextOffset = detail.RawOffset + detail.Raw.Length;
+      return
+      [
+          $"raw is truncated ({detail.Raw.Length} of {detail.RawLength} chars shown, offset {detail.RawOffset}).",
+          $"Fetch next slice: get_memory(id=\"{detail.Ref}\", rawOffset={nextOffset}, rawMaxChars={MemoryLimits.DefaultGetMaxChars})"
+      ];
+  }
+
   private static string NormalizeTopic(string? topic)
   {
     if (string.IsNullOrWhiteSpace(topic))
@@ -361,6 +379,7 @@ public static class AgentGuidance
       "maintain" or "maintenance" or "cleanup" or "vocabulary" => "maintenance",
       "example" or "examples" or "sample" => "examples",
       "quick" or "quickstart" or "cheatsheet" => "quickstart",
+      "bigpayload" or "payload" or "large" or "rawpath" => "bigpayload",
       var other => other
     };
   }
@@ -390,6 +409,7 @@ public static class AgentGuidance
       | `tokens` | Token rules and token vs relationship |
       | `maintenance` | Renaming/splitting properties over time |
       | `examples` | JSON bundle examples |
+      | `bigpayload` | Large raw text — file paths, read previews, paging |
 
       ## Golden rules
       1. **Save** on explicit order; **ask once** for relevant facts without a save request; **do not** auto-save everything.
@@ -456,7 +476,15 @@ public static class AgentGuidance
 
       ### Batch: multiple observations
       Use `store_memory_bundles` with a JSON array (max 100) — one transaction, all-or-nothing.
+      For large batch payloads use `bundlesPath` (JSON array file) instead of inlining `bundlesJson`.
       To append tokens to **existing** memories: `create_and_link_tokens` (max 500) or `link_memory_tokens` for existing token ids.
+
+      ### Large raw text (big payload)
+      Do **not** inline very large `raw` in tool arguments — the model must emit every character as output tokens.
+      1. Write observation text to a UTF-8 file (Write tool / temp file in workspace)
+      2. Call `store_memory_bundle(rawPath="C:\\path\\to\\observation.txt", entitiesJson=..., tokensJson=..., ...)`
+      3. Or put the full bundle JSON in a file and pass `bundlePath`
+      Max file size: 2 MB. Max stored raw: 2 000 000 characters.
 
       ### Before calling store
       - `list_token_properties` — discover existing vocabulary (Year vs BirthYear)
@@ -477,6 +505,43 @@ public static class AgentGuidance
       ## Token vs relationship at store time
       - Raw says "Sandra is 38" → token `Age=38` on Sandra
       - Raw says "Åsa is the same age as Sandra" → relationship `SameAgeAs`, **no** Age token on Åsa
+      """;
+
+  public const string BigPayloadGuide = """
+      # Big payload — large raw text
+
+      ## Problem
+      MCP tool arguments are emitted by the model as output tokens. Inlining megabytes of `raw` truncates or fails.
+
+      ## Store (write path)
+      1. Write observation text to a UTF-8 file in the workspace
+      2. Pass a **path** instead of inline text:
+
+      | Tool | Path parameter | Inline alternative |
+      |------|----------------|-------------------|
+      | `store_memory_bundle` | `rawPath` or `bundlePath` | `raw` + JSON strings |
+      | `store_memory_bundles` | `bundlesPath` | `bundlesJson` |
+      | `create_memory` | `rawPath` | `raw` |
+      | `revise_memory` | `correctedRawPath` | `correctedRaw` |
+
+      Path overrides inline when both are set. Max file size: **2 MB**. Max stored raw: **2 000 000** characters.
+
+      Example:
+      ```
+      store_memory_bundle(
+        rawPath = "C:\\Git\\MyProject\\notes\\observation.txt",
+        entitiesJson = "[{\"clientKey\":\"doc\",\"type\":\"Document\",\"name\":\"API spec\"}]",
+        entityLinksJson = "[\"doc\"]"
+      )
+      ```
+
+      ## Read (response path)
+      - `search_*` / `list_memories`: `raw` is a **500-char preview**; check `rawLength` and `rawTruncated`
+      - `get_memory`: returns up to **32 000** chars by default; paginate with `rawOffset` and `rawMaxChars`
+      - When truncated, `nextSteps` in the response shows the next `get_memory` call
+
+      ## CLI
+      `dotnet MemoryMCP.dll --store-bundle-json path\\to\\bundle.json` — same bundle file shape as `bundlePath`.
       """;
 
   private const string RetrieveWorkflow = """
@@ -501,8 +566,8 @@ public static class AgentGuidance
       | How entities connect | `find_relationships`, `get_entity_graph` |
 
       ## Drill down
-      1. Search → note **Ref** on each result (Guid also present)
-      2. `get_memory(id=Ref)` — full raw text, entities, tokens, relationships, revisions
+      1. Search → note **Ref** on each result (Guid also present). `raw` in search/list is a **preview** (500 chars); see `rawLength` / `rawTruncated`.
+      2. `get_memory(id=Ref)` — full raw up to 32k chars; use `rawOffset` / `rawMaxChars` for larger memories
       3. `get_entity` / `get_token` — pass Ref from list results
       4. `get_memory_history` / `get_token_history` — corrections and audit
 

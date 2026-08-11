@@ -8,15 +8,7 @@ public static class StoreBundleCli
 {
     public static async Task<int> RunAsync(IServiceProvider services, string jsonPath)
     {
-        if (!File.Exists(jsonPath))
-        {
-            Console.Error.WriteLine($"Bundle file not found: {jsonPath}");
-            return 1;
-        }
-
-        var json = await File.ReadAllTextAsync(jsonPath);
-        var input = JsonSerializer.Deserialize<StoreMemoryBundleInput>(json, JsonOptions())
-            ?? throw new InvalidOperationException("Failed to deserialize bundle JSON.");
+        var input = await PayloadPathReader.ReadJsonFileAsync<StoreMemoryBundleInput>(jsonPath, JsonOptions());
 
         using var scope = services.CreateScope();
         var memoryStore = scope.ServiceProvider.GetRequiredService<MemoryStoreService>();

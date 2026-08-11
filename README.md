@@ -107,6 +107,25 @@ dotnet run -- --typ sqlite --verify     # SQLite
 
 The server uses **stdio** transport for MCP clients such as Cursor.
 
+## Large raw text (big payload)
+
+For observations longer than ~2k characters, **do not inline** `raw` in MCP tool calls — the model must emit every character as output tokens.
+
+1. Write the text to a UTF-8 file (workspace or temp path)
+2. Pass the path to the server:
+
+| Tool | Path parameter |
+|------|----------------|
+| `store_memory_bundle` | `rawPath` or `bundlePath` (full bundle JSON file) |
+| `store_memory_bundles` | `bundlesPath` |
+| `create_memory` / `revise_memory` | `rawPath` / `correctedRawPath` |
+
+CLI equivalent: `dotnet MemoryMCP.dll --store-bundle-json path\to\bundle.json`
+
+**Read path:** `search_*` and `list_memories` return a 500-character `raw` preview (`rawLength`, `rawTruncated`). Use `get_memory` for full text (32k chars default); paginate with `rawOffset` and `rawMaxChars`.
+
+See `get_memorymcp_guide(topic="bigpayload")` or MCP resource `memorymcp://guide/bigpayload`.
+
 ## Cursor MCP configuration
 
 ### SQLite i detta repo (Windows, för test)
