@@ -8,7 +8,7 @@ public class GuideResources(ServerStartupOptions startupOptions)
 {
     [McpServerResource(UriTemplate = "memorymcp://guide/start", Name = "start", MimeType = "text/markdown")]
     [Description("Onboarding README: Ref ids, when to save vs ask, when to retrieve, store without structure prompts.")]
-    public string StartGuide() => AgentGuidance.BuildStartHere(startupOptions.WhoAmI);
+    public string StartGuide() => AgentGuidance.BuildStartHere(startupOptions.WhoAmI, startupOptions.Partition);
 
     [McpServerResource(UriTemplate = "memorymcp://guide/refs", Name = "refs", MimeType = "text/markdown")]
     [Description("Ref vs Guid: prefer 8-char Ref in tool calls; Guid backward compatible.")]

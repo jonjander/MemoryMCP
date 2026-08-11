@@ -171,6 +171,10 @@ namespace MemoryMCP.Migrations.Sqlite
                     b.Property<DateTime?>("MemoryFrom")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Partition")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Raw")
                         .IsRequired()
                         .HasMaxLength(8000)
@@ -201,6 +205,8 @@ namespace MemoryMCP.Migrations.Sqlite
                     b.HasIndex("Created");
 
                     b.HasIndex("MemoryFrom");
+
+                    b.HasIndex("Partition");
 
                     b.HasIndex("Ref")
                         .IsUnique()

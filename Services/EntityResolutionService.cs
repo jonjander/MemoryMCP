@@ -4,8 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoryMCP.Services;
 
-public class EntityResolutionService(MemoryDbContext db)
+public class EntityResolutionService(MemoryDbContext db, ServerStartupOptions? startupOptions = null)
 {
+    private string? Partition => startupOptions?.Partition;
     public async Task<Entity> ResolveOrCreateAsync(string type, string name, bool forceCreate = false, CancellationToken cancellationToken = default)
     {
         var normalizedType = type.Trim();
@@ -214,7 +215,9 @@ public class EntityResolutionService(MemoryDbContext db)
             .Select(e => new
             {
                 Entity = e,
-                MemoryCount = e.Memories.Count
+                MemoryCount = string.IsNullOrEmpty(Partition)
+                    ? e.Memories.Count
+                    : e.Memories.Count(me => me.Memory.Partition == Partition)
             })
             .OrderBy(x => x.Entity.Name)
             .Take(100)
@@ -237,10 +240,13 @@ public class EntityResolutionService(MemoryDbContext db)
         if (entity is null)
             return null;
 
-        var memoryCount = await db.MemoryEntities.CountAsync(me => me.EntityId == id, cancellationToken);
-        var recentMemories = await db.MemoryEntities
+        var memoryLinks = db.MemoryEntities.Where(me => me.EntityId == id);
+        if (!string.IsNullOrEmpty(Partition))
+            memoryLinks = memoryLinks.Where(me => me.Memory.Partition == Partition);
+
+        var memoryCount = await memoryLinks.CountAsync(cancellationToken);
+        var recentMemories = await memoryLinks
             .AsNoTracking()
-            .Where(me => me.EntityId == id)
             .Select(me => me.Memory)
             .OrderByDescending(m => m.Created)
             .Take(10)
@@ -269,7 +275,7 @@ public class EntityResolutionService(MemoryDbContext db)
             return null;
 
         return new EntityHistoryDto(
-            ModelMappers.ToSummary(entity, entity.Memories.Count),
+            await ToSummaryAsync(entity.Id, cancellationToken),
             entity.Revisions.OrderByDescending(r => r.Created).Select(ToRevisionDto).ToList());
     }
 
@@ -323,7 +329,10 @@ public class EntityResolutionService(MemoryDbContext db)
     private async Task<EntitySummaryDto> ToSummaryAsync(Guid id, CancellationToken cancellationToken)
     {
         var entity = await db.Entities.AsNoTracking().FirstAsync(e => e.Id == id, cancellationToken);
-        var memoryCount = await db.MemoryEntities.CountAsync(me => me.EntityId == id, cancellationToken);
+        var memoryLinks = db.MemoryEntities.Where(me => me.EntityId == id);
+        if (!string.IsNullOrEmpty(Partition))
+            memoryLinks = memoryLinks.Where(me => me.Memory.Partition == Partition);
+        var memoryCount = await memoryLinks.CountAsync(cancellationToken);
         return ModelMappers.ToSummary(entity, memoryCount);
     }
 

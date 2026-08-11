@@ -16,7 +16,8 @@ public record MemoryDetailDto(
     IReadOnlyList<RelationshipSummaryDto> Relationships,
     IReadOnlyList<MemoryRevisionDto> Revisions,
     MemorySummaryDto? SupersedesMemory,
-    MemorySummaryDto? SupersededByMemory);
+    MemorySummaryDto? SupersededByMemory,
+    string? Partition = null);
 
 public record MemorySummaryDto(
     string Ref,
@@ -26,7 +27,8 @@ public record MemorySummaryDto(
     DateTime? MemoryFrom,
     MemoryStatus Status = MemoryStatus.Active,
     Guid? SupersedesMemoryId = null,
-    Guid? SupersededByMemoryId = null);
+    Guid? SupersededByMemoryId = null,
+    string? Partition = null);
 
 public enum MemoryListSort
 {
@@ -45,7 +47,8 @@ public record MemoryListItemDto(
     int TokenCount,
     int EntityCount,
     Guid? SupersedesMemoryId = null,
-    Guid? SupersededByMemoryId = null);
+    Guid? SupersededByMemoryId = null,
+    string? Partition = null);
 
 public record MemoryListFilters(
     int? MaxTokenCount,

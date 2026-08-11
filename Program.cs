@@ -65,7 +65,7 @@ builder.Services.AddScoped<SearchService>();
 builder.Services.AddScoped<SqliteImportService>();
 
 builder.Services
-    .AddMcpServer(options => options.ServerInstructions = AgentGuidance.BuildServerInstructions(startupOptions.WhoAmI))
+    .AddMcpServer(options => options.ServerInstructions = AgentGuidance.BuildServerInstructions(startupOptions.WhoAmI, startupOptions.Partition))
     .WithStdioServerTransport()
     .WithTools<GuideTools>()
     .WithTools<MemoryTools>()

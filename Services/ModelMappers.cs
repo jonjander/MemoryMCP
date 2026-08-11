@@ -16,7 +16,8 @@ public static class ModelMappers
             memory.MemoryFrom,
             memory.Status,
             memory.SupersedesMemoryId,
-            memory.SupersededByMemoryId);
+            memory.SupersededByMemoryId,
+            memory.Partition);
 
     public static MemoryListItemDto ToListItem(Memory memory, int tokenCount, int entityCount) =>
         new(
@@ -29,7 +30,8 @@ public static class ModelMappers
             tokenCount,
             entityCount,
             memory.SupersedesMemoryId,
-            memory.SupersededByMemoryId);
+            memory.SupersededByMemoryId,
+            memory.Partition);
 
     public static TokenSummaryDto ToSummary(Token token) =>
         new(

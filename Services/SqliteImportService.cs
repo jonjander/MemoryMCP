@@ -224,6 +224,7 @@ public class SqliteImportService(
                 {
                     Id = Guid.NewGuid(),
                     Raw = src.Raw,
+                    Partition = src.Partition,
                     Created = src.Created,
                     Updated = src.Updated,
                     MemoryFrom = src.MemoryFrom,

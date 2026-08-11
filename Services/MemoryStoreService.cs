@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoryMCP.Services;
 
-public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
+public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver, ServerStartupOptions startupOptions)
 {
     public async Task<CreateMemoryResult> CreateMemoryAsync(string raw, DateTime? memoryFrom = null, CancellationToken cancellationToken = default)
     {
@@ -14,6 +14,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         {
             Id = Guid.NewGuid(),
             Raw = raw,
+            Partition = startupOptions.Partition,
             Created = DateTime.UtcNow,
             MemoryFrom = memoryFrom,
             Status = MemoryStatus.Active
@@ -28,6 +29,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
     {
         var memory = await db.Memories
             .AsNoTracking()
+            .InPartition(startupOptions.Partition)
             .Include(m => m.Entities).ThenInclude(me => me.Entity)
             .Include(m => m.Tokens).ThenInclude(mt => mt.Token)
             .Include(m => m.Revisions)
@@ -67,7 +69,9 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         if (percentBelowAverage is < 0 or > 100)
             throw new InvalidOperationException("percentBelowAverage must be between 0 and 100.");
 
-        var baseQuery = db.Memories.AsNoTracking().WhereActive(includeInactive);
+        var baseQuery = db.Memories.AsNoTracking()
+            .InPartition(startupOptions.Partition)
+            .WhereActive(includeInactive);
         if (createdSince.HasValue)
             baseQuery = baseQuery.Where(m => m.Created >= createdSince.Value);
 
@@ -139,10 +143,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         string? note = null,
         CancellationToken cancellationToken = default)
     {
-        var memory = await db.Memories.FirstOrDefaultAsync(m => m.Id == id, cancellationToken)
-            ?? throw new InvalidOperationException("Memory not found.");
-
-        EnsureMutable(memory);
+        var memory = await FindMutableMemoryAsync(id, cancellationToken);
 
         var previous = memory.MemoryFrom;
         memory.MemoryFrom = memoryFrom;
@@ -173,8 +174,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         if (status is not (MemoryStatus.Invalid or MemoryStatus.Retracted))
             throw new InvalidOperationException("Status must be Invalid or Retracted.");
 
-        var memory = await db.Memories.FirstOrDefaultAsync(m => m.Id == id, cancellationToken)
-            ?? throw new InvalidOperationException("Memory not found.");
+        var memory = await FindMemoryInPartitionAsync(id, cancellationToken);
 
         if (memory.Status == MemoryStatus.Superseded)
             throw new InvalidOperationException("Cannot invalidate a superseded memory. Use the active successor instead.");
@@ -212,6 +212,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
             throw new InvalidOperationException("Corrected raw text is required.");
 
         var original = await db.Memories
+            .InPartition(startupOptions.Partition)
             .Include(m => m.Entities)
             .FirstOrDefaultAsync(m => m.Id == originalId, cancellationToken)
             ?? throw new InvalidOperationException("Memory not found.");
@@ -225,6 +226,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         {
             Id = Guid.NewGuid(),
             Raw = correctedRaw,
+            Partition = original.Partition ?? startupOptions.Partition,
             Created = DateTime.UtcNow,
             MemoryFrom = memoryFrom ?? original.MemoryFrom,
             Status = MemoryStatus.Active,
@@ -289,6 +291,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
     {
         var memory = await db.Memories
             .AsNoTracking()
+            .InPartition(startupOptions.Partition)
             .Include(m => m.Revisions)
             .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
 
@@ -331,7 +334,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         if (exists)
             return;
 
-        var memoryExists = await db.Memories.AnyAsync(m => m.Id == memoryId, cancellationToken);
+        var memoryExists = await MemoryExistsInPartitionAsync(memoryId, cancellationToken);
         var entityExists = await db.Entities.AnyAsync(e => e.Id == entityId, cancellationToken);
         if (!memoryExists || !entityExists)
             throw new InvalidOperationException("Memory or entity not found.");
@@ -346,7 +349,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         if (exists)
             return;
 
-        var memoryExists = await db.Memories.AnyAsync(m => m.Id == memoryId, cancellationToken);
+        var memoryExists = await MemoryExistsInPartitionAsync(memoryId, cancellationToken);
         var tokenExists = await db.Tokens.AnyAsync(t => t.Id == tokenId, cancellationToken);
         if (!memoryExists || !tokenExists)
             throw new InvalidOperationException("Memory or token not found.");
@@ -362,6 +365,9 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
 
     public async Task UnlinkMemoryEntityAsync(Guid memoryId, Guid entityId, CancellationToken cancellationToken = default)
     {
+        if (!await MemoryExistsInPartitionAsync(memoryId, cancellationToken))
+            throw new InvalidOperationException("Memory not found.");
+
         var link = await db.MemoryEntities.FirstOrDefaultAsync(me => me.MemoryId == memoryId && me.EntityId == entityId, cancellationToken);
         if (link is null)
             return;
@@ -372,6 +378,9 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
 
     public async Task UnlinkMemoryTokenAsync(Guid memoryId, Guid tokenId, CancellationToken cancellationToken = default)
     {
+        if (!await MemoryExistsInPartitionAsync(memoryId, cancellationToken))
+            throw new InvalidOperationException("Memory not found.");
+
         var link = await db.MemoryTokens.FirstOrDefaultAsync(mt => mt.MemoryId == memoryId && mt.TokenId == tokenId, cancellationToken);
         if (link is null)
             return;
@@ -507,7 +516,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
                 continue;
             }
 
-            var memoryExists = await db.Memories.AnyAsync(m => m.Id == memoryId, cancellationToken);
+            var memoryExists = await MemoryExistsInPartitionAsync(memoryId, cancellationToken);
             var tokenExists = await db.Tokens.AnyAsync(t => t.Id == tokenId, cancellationToken);
             if (!memoryExists || !tokenExists)
                 throw new InvalidOperationException($"Memory or token not found for link memoryId={link.MemoryId}, tokenId={link.TokenId}.");
@@ -576,7 +585,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
             try
             {
                 var memoryId = await refResolver.ResolveMemoryIdAsync(item.MemoryId, cancellationToken);
-                var memoryExists = await db.Memories.AnyAsync(m => m.Id == memoryId, cancellationToken);
+                var memoryExists = await MemoryExistsInPartitionAsync(memoryId, cancellationToken);
                 if (!memoryExists)
                     throw new InvalidOperationException($"Memory not found: {item.MemoryId}.");
 
@@ -647,15 +656,16 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
         {
             Id = Guid.NewGuid(),
             Raw = input.Raw,
+            Partition = startupOptions.Partition,
             Created = DateTime.UtcNow,
             MemoryFrom = input.MemoryFrom,
             Status = MemoryStatus.Active
         };
         db.Memories.Add(memory);
 
-        var entityResolution = new EntityResolutionService(db);
+        var entityResolution = new EntityResolutionService(db, startupOptions);
         var tokenService = new TokenService(db);
-        var relationshipService = new RelationshipService(db);
+        var relationshipService = new RelationshipService(db, startupOptions);
 
         var entityIds = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         foreach (var entityInput in input.Entities ?? [])
@@ -710,6 +720,7 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
     {
         var existing = await db.Memories
             .AsNoTracking()
+            .InPartition(startupOptions.Partition)
             .WhereActive(includeInactive: false)
             .Where(m => m.Raw == raw)
             .OrderByDescending(m => m.Created)
@@ -728,6 +739,22 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
             existingCount,
             existing.Select(ToSummary).ToList());
     }
+
+    private async Task<Memory> FindMemoryInPartitionAsync(Guid id, CancellationToken cancellationToken) =>
+        await db.Memories
+            .InPartition(startupOptions.Partition)
+            .FirstOrDefaultAsync(m => m.Id == id, cancellationToken)
+        ?? throw new InvalidOperationException("Memory not found.");
+
+    private async Task<Memory> FindMutableMemoryAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var memory = await FindMemoryInPartitionAsync(id, cancellationToken);
+        EnsureMutable(memory);
+        return memory;
+    }
+
+    private Task<bool> MemoryExistsInPartitionAsync(Guid memoryId, CancellationToken cancellationToken) =>
+        db.Memories.InPartition(startupOptions.Partition).AnyAsync(m => m.Id == memoryId, cancellationToken);
 
     private static void EnsureMutable(Memory memory)
     {
@@ -781,7 +808,8 @@ public class MemoryStoreService(MemoryDbContext db, RefIdResolver refResolver)
             relationships.Select(RelationshipService.ToSummary).ToList(),
             memory.Revisions.OrderByDescending(r => r.Created).Select(ToRevisionDto).ToList(),
             memory.SupersedesMemory is null ? null : ToSummary(memory.SupersedesMemory),
-            memory.SupersededByMemory is null ? null : ToSummary(memory.SupersededByMemory));
+            memory.SupersededByMemory is null ? null : ToSummary(memory.SupersededByMemory),
+            memory.Partition);
 
     private static MemoryRevisionDto ToRevisionDto(MemoryRevision revision) =>
         new(

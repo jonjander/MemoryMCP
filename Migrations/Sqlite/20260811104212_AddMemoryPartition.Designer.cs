@@ -3,53 +3,51 @@ using System;
 using MemoryMCP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace MemoryMCP.Migrations
+namespace MemoryMCP.Migrations.Sqlite
 {
-    [DbContext(typeof(MemoryDbContext))]
-    partial class MemoryDbContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(SqliteMemoryDbContext))]
+    [Migration("20260811104212_AddMemoryPartition")]
+    partial class AddMemoryPartition
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
-                .HasAnnotation("Relational:MaxIdentifierLength", 128);
-
-            SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
 
             modelBuilder.Entity("MemoryMCP.Entity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid?>("MergedIntoEntityId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Ref")
-                        .HasMaxLength(8)
-                        .HasColumnType("nvarchar(8)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Ref")
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Status")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("Updated")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -72,84 +70,31 @@ namespace MemoryMCP.Migrations
                     b.ToTable("Entities", (string)null);
                 });
 
-            modelBuilder.Entity("MemoryMCP.EntityRevision", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("Created")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("EntityId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("NewName")
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<int?>("NewStatus")
-                        .HasColumnType("int");
-
-                    b.Property<string>("NewType")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<string>("PreviousName")
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<int?>("PreviousStatus")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PreviousType")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<Guid?>("RelatedEntityId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("RevisionType")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Created");
-
-                    b.HasIndex("EntityId");
-
-                    b.ToTable("EntityRevisions", (string)null);
-                });
-
             modelBuilder.Entity("MemoryMCP.EntityRelationship", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<float>("Confidence")
-                        .HasColumnType("real");
+                        .HasColumnType("REAL");
 
                     b.Property<DateTime>("Created")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("FromEntityId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid?>("MemoryId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RelationType")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("ToEntityId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -164,46 +109,99 @@ namespace MemoryMCP.Migrations
                     b.ToTable("EntityRelationships", (string)null);
                 });
 
+            modelBuilder.Entity("MemoryMCP.EntityRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NewName")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("NewStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("NewType")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PreviousName")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PreviousStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PreviousType")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("RelatedEntityId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RevisionType")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Created");
+
+                    b.HasIndex("EntityId");
+
+                    b.ToTable("EntityRevisions", (string)null);
+                });
+
             modelBuilder.Entity("MemoryMCP.Memory", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("Created")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("MemoryFrom")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Partition")
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Raw")
                         .IsRequired()
                         .HasMaxLength(8000)
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Ref")
                         .HasMaxLength(8)
-                        .HasColumnType("nvarchar(8)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Status")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("StatusNote")
                         .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid?>("SupersededByMemoryId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid?>("SupersedesMemoryId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("Updated")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -226,43 +224,58 @@ namespace MemoryMCP.Migrations
                     b.ToTable("Memories", (string)null);
                 });
 
+            modelBuilder.Entity("MemoryMCP.MemoryEntity", b =>
+                {
+                    b.Property<Guid>("MemoryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("MemoryId", "EntityId");
+
+                    b.HasIndex("EntityId");
+
+                    b.ToTable("MemoryEntities", (string)null);
+                });
+
             modelBuilder.Entity("MemoryMCP.MemoryRevision", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("Created")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("MemoryId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("NewMemoryFrom")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("NewStatus")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Note")
                         .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("PreviousMemoryFrom")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("PreviousStatus")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("RevisionType")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("SuccessorMemoryId")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SuccessorRaw")
                         .HasMaxLength(8000)
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid?>("SuccessorMemoryId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -273,32 +286,17 @@ namespace MemoryMCP.Migrations
                     b.ToTable("MemoryRevisions", (string)null);
                 });
 
-            modelBuilder.Entity("MemoryMCP.MemoryEntity", b =>
-                {
-                    b.Property<Guid>("MemoryId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("EntityId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("MemoryId", "EntityId");
-
-                    b.HasIndex("EntityId");
-
-                    b.ToTable("MemoryEntities", (string)null);
-                });
-
             modelBuilder.Entity("MemoryMCP.MemoryToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("MemoryId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("TokenId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -314,71 +312,63 @@ namespace MemoryMCP.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool?>("BoolValue")
-                        .HasColumnType("bit");
+                        .HasColumnType("INTEGER");
 
                     b.Property<float>("Confidence")
-                        .HasColumnType("real");
+                        .HasColumnType("REAL");
 
                     b.Property<DateTime>("Created")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DateTimeValue")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.Property<float?>("FloatValue")
-                        .HasColumnType("real");
+                        .HasColumnType("REAL");
 
                     b.Property<int?>("IntValue")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Property")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Ref")
                         .HasMaxLength(8)
-                        .HasColumnType("nvarchar(8)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SearchValue")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Source")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Status")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("StringValue")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid?>("SupersededByTokenId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid?>("SupersedesTokenId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Type")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("Updated")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Property", "IntValue");
-
-                    b.HasIndex("Property", "SearchValue");
-
-                    b.HasIndex("Property", "StringValue");
-
-                    b.HasIndex("Property", "Type", "SearchValue");
 
                     b.HasIndex("Ref")
                         .IsUnique()
@@ -390,6 +380,14 @@ namespace MemoryMCP.Migrations
 
                     b.HasIndex("SupersedesTokenId");
 
+                    b.HasIndex("Property", "IntValue");
+
+                    b.HasIndex("Property", "SearchValue");
+
+                    b.HasIndex("Property", "StringValue");
+
+                    b.HasIndex("Property", "Type", "SearchValue");
+
                     b.ToTable("Tokens", (string)null);
                 });
 
@@ -397,63 +395,63 @@ namespace MemoryMCP.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("Created")
-                        .HasColumnType("datetime2");
+                        .HasColumnType("TEXT");
+
+                    b.Property<float?>("NewConfidence")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("NewProperty")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<float?>("NewConfidence")
-                        .HasColumnType("real");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("NewSearchValue")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("NewSource")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("NewStatus")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("NewType")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Note")
                         .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                        .HasColumnType("TEXT");
+
+                    b.Property<float?>("PreviousConfidence")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("PreviousProperty")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<float?>("PreviousConfidence")
-                        .HasColumnType("real");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PreviousSearchValue")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("PreviousSource")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("PreviousStatus")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("PreviousType")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("RevisionType")
-                        .HasColumnType("int");
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid?>("SuccessorTokenId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("TokenId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -462,6 +460,16 @@ namespace MemoryMCP.Migrations
                     b.HasIndex("TokenId");
 
                     b.ToTable("TokenRevisions", (string)null);
+                });
+
+            modelBuilder.Entity("MemoryMCP.Entity", b =>
+                {
+                    b.HasOne("MemoryMCP.Entity", "MergedIntoEntity")
+                        .WithMany()
+                        .HasForeignKey("MergedIntoEntityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("MergedIntoEntity");
                 });
 
             modelBuilder.Entity("MemoryMCP.EntityRelationship", b =>
@@ -488,16 +496,6 @@ namespace MemoryMCP.Migrations
                     b.Navigation("Memory");
 
                     b.Navigation("ToEntity");
-                });
-
-            modelBuilder.Entity("MemoryMCP.Entity", b =>
-                {
-                    b.HasOne("MemoryMCP.Entity", "MergedIntoEntity")
-                        .WithMany()
-                        .HasForeignKey("MergedIntoEntityId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("MergedIntoEntity");
                 });
 
             modelBuilder.Entity("MemoryMCP.EntityRevision", b =>
@@ -528,17 +526,6 @@ namespace MemoryMCP.Migrations
                     b.Navigation("SupersedesMemory");
                 });
 
-            modelBuilder.Entity("MemoryMCP.MemoryRevision", b =>
-                {
-                    b.HasOne("MemoryMCP.Memory", "Memory")
-                        .WithMany("Revisions")
-                        .HasForeignKey("MemoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Memory");
-                });
-
             modelBuilder.Entity("MemoryMCP.MemoryEntity", b =>
                 {
                     b.HasOne("MemoryMCP.Entity", "Entity")
@@ -554,6 +541,17 @@ namespace MemoryMCP.Migrations
                         .IsRequired();
 
                     b.Navigation("Entity");
+
+                    b.Navigation("Memory");
+                });
+
+            modelBuilder.Entity("MemoryMCP.MemoryRevision", b =>
+                {
+                    b.HasOne("MemoryMCP.Memory", "Memory")
+                        .WithMany("Revisions")
+                        .HasForeignKey("MemoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Memory");
                 });

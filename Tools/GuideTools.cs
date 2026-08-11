@@ -13,7 +13,7 @@ public class GuideTools(ServerStartupOptions startupOptions)
         "Relevant fact without save request → may ask once 'Vill du att jag ska lägga detta i minnet?'. " +
         "When to RETRIEVE: user asks to recall or prior knowledge helps → search_* without asking. " +
         "Once saving: infer entities and tokens — never ask about Person entity structure.")]
-    public string StartHere() => AgentGuidance.BuildStartHere(startupOptions.WhoAmI);
+    public string StartHere() => AgentGuidance.BuildStartHere(startupOptions.WhoAmI, startupOptions.Partition);
 
     [McpServerTool, Description(
         "Get MemoryMCP workflow and usage guidance. Call start_here first if you are new. " +

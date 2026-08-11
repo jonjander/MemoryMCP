@@ -5,6 +5,7 @@ public static class DatabaseBootstrap
     private const string TypeFlag = "--typ";
     private const string DbNameFlag = "--dbName";
     private const string WhoAmIFlag = "--whoami";
+    private const string PartitionFlag = "--partition";
     private const string TypeEnvVar = "MEMORYMCP_TYP";
 
     public static (DatabaseType Type, string[] RemainingArgs, ServerStartupOptions Options) ParseArgs(string[] args)
@@ -46,6 +47,15 @@ public static class DatabaseBootstrap
                 continue;
             }
 
+            if (string.Equals(args[i], PartitionFlag, StringComparison.OrdinalIgnoreCase))
+            {
+                if (i + 1 >= args.Length)
+                    throw new InvalidOperationException($"Missing value after {PartitionFlag}.");
+
+                options = options with { Partition = NormalizePartition(args[++i]) };
+                continue;
+            }
+
             remaining.Add(args[i]);
         }
 
@@ -78,6 +88,27 @@ public static class DatabaseBootstrap
         }
 
         return fileName;
+    }
+
+    private static string NormalizePartition(string value)
+    {
+        var partition = value.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(partition))
+            throw new InvalidOperationException($"{PartitionFlag} requires a non-empty key (e.g. faq, privat).");
+
+        if (partition.Length > 64)
+            throw new InvalidOperationException($"{PartitionFlag} must be at most 64 characters.");
+
+        foreach (var c in partition)
+        {
+            if (char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
+                continue;
+
+            throw new InvalidOperationException(
+                $"{PartitionFlag} may only contain letters, digits, '-', '_' and '.' (got '{value}').");
+        }
+
+        return partition;
     }
 
     private static DatabaseType ParseTypeFromEnv()

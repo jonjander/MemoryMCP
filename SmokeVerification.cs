@@ -144,6 +144,8 @@ public static class SmokeVerification
         if (sparse.Items[0].TokenCount > sparse.Items[^1].TokenCount)
             throw new InvalidOperationException("List memories TokenCountAsc sort failed.");
 
+        await RunPartitionSmokeAsync(scope.ServiceProvider);
+
         var db = scope.ServiceProvider.GetRequiredService<MemoryDbContext>();
         if (db.Database.IsSqlServer())
             await RunSqliteImportSmokeAsync(scope.ServiceProvider, entityService, searchService);
@@ -152,6 +154,48 @@ public static class SmokeVerification
 
         Console.Error.WriteLine("Smoke verification passed (test data cleaned up).");
         return 0;
+    }
+
+    private static async Task RunPartitionSmokeAsync(IServiceProvider scopedServices)
+    {
+        var db = scopedServices.GetRequiredService<MemoryDbContext>();
+
+        var faqOptions = new ServerStartupOptions { Partition = "faq" };
+        var privatOptions = new ServerStartupOptions { Partition = "privat" };
+        var allOptions = new ServerStartupOptions();
+
+        var faqStore = new MemoryStoreService(db, new RefIdResolver(db, faqOptions), faqOptions);
+        var privatStore = new MemoryStoreService(db, new RefIdResolver(db, privatOptions), privatOptions);
+        var allSearch = new SearchService(db, new RefIdResolver(db, allOptions), allOptions);
+        var faqSearch = new SearchService(db, new RefIdResolver(db, faqOptions), faqOptions);
+
+        var faq = await faqStore.StoreBundleAsync(new StoreMemoryBundleInput(
+            Raw: "[smoke] FAQ: how do I reset my password?"));
+        var privat = await privatStore.StoreBundleAsync(new StoreMemoryBundleInput(
+            Raw: "[smoke] I bought a dog named Bamse."));
+
+        if (faq.MemoryId == Guid.Empty || privat.MemoryId == Guid.Empty)
+            throw new InvalidOperationException("Partition store failed.");
+
+        var faqDetail = await faqStore.GetMemoryAsync(faq.MemoryId);
+        if (faqDetail?.Partition != "faq")
+            throw new InvalidOperationException("FAQ memory missing Partition=faq.");
+
+        var hidden = await faqStore.GetMemoryAsync(privat.MemoryId);
+        if (hidden is not null)
+            throw new InvalidOperationException("FAQ partition should not see privat memory.");
+
+        var faqHits = await faqSearch.SearchMemoriesByTextAsync("dog");
+        if (faqHits.Any(m => m.Id == privat.MemoryId))
+            throw new InvalidOperationException("FAQ search should not return privat dog memory.");
+
+        var allHits = await allSearch.SearchMemoriesByTextAsync("dog");
+        if (allHits.All(m => m.Id != privat.MemoryId))
+            throw new InvalidOperationException("Unscoped search should see privat dog memory.");
+
+        var allFaq = await allSearch.SearchMemoriesByTextAsync("password");
+        if (allFaq.All(m => m.Id != faq.MemoryId))
+            throw new InvalidOperationException("Unscoped search should see faq memory.");
     }
 
     private static async Task RunSqliteImportSmokeAsync(
@@ -208,8 +252,9 @@ public static class SmokeVerification
         await using var sqliteDb = new SqliteMemoryDbContext(options);
         await sqliteDb.Database.MigrateAsync();
 
-        var refResolver = new RefIdResolver(sqliteDb);
-        var store = new MemoryStoreService(sqliteDb, refResolver);
+        var startupOptions = new ServerStartupOptions();
+        var refResolver = new RefIdResolver(sqliteDb, startupOptions);
+        var store = new MemoryStoreService(sqliteDb, refResolver, startupOptions);
 
         await store.StoreBundleAsync(new StoreMemoryBundleInput(
             Raw: "[import-smoke] Alva likes pasta.",

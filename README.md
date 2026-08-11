@@ -22,12 +22,14 @@ No connection string needed. Creates and uses a SQLite file in the same folder a
 dotnet run -- --typ sqlite
 dotnet run -- --typ sqlite --dbName jon-memory.db
 dotnet run -- --typ sqlite --whoami "Jon Jander"
+dotnet run -- --typ sqlite --partition faq
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--dbName` | `memory.db` | SQLite file name next to the executable (not a path) |
 | `--whoami` | *(none)* | Full name (för- och efternamn). Agent maps "jag" / "I" / "me" to this Person in `store_memory_bundle` |
+| `--partition` | *(none)* | Isolation key for memories. When set (e.g. `faq`), all writes get that partition and reads only see it. When omitted, writes use null and reads see **all** partitions (including null) |
 
 Or via environment variable (useful in Cursor MCP config):
 
@@ -139,6 +141,15 @@ A ready-made snippet for your **global** Cursor config (`%USERPROFILE%\.cursor\m
 "memorymcp": {
   "command": "dotnet",
   "args": ["C:\\Git\\MemoryMCP\\bin\\mcp\\MemoryMCP.dll", "--typ", "sqlite", "--whoami", "För Efternamn"]
+}
+```
+
+Scoped FAQ instance (only reads/writes `faq` partition):
+
+```json
+"memorymcp-faq": {
+  "command": "dotnet",
+  "args": ["C:\\Git\\MemoryMCP\\bin\\mcp\\MemoryMCP.dll", "--typ", "sqlite", "--whoami", "För Efternamn", "--partition", "faq"]
 }
 ```
 

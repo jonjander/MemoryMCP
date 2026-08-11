@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoryMCP.Services;
 
-public class SearchService(MemoryDbContext db, RefIdResolver refResolver)
+public class SearchService(MemoryDbContext db, RefIdResolver refResolver, ServerStartupOptions startupOptions)
 {
     public async Task<IReadOnlyList<MemorySummaryDto>> SearchMemoriesByTextAsync(
         string query,
@@ -15,6 +15,7 @@ public class SearchService(MemoryDbContext db, RefIdResolver refResolver)
             return [];
 
         var trimmed = query.Trim();
+        var partition = startupOptions.Partition;
 
         if (!db.Database.IsSqlite())
         {
@@ -23,21 +24,35 @@ public class SearchService(MemoryDbContext db, RefIdResolver refResolver)
                 List<Memory> ftsResults;
                 if (includeInactive)
                 {
-                    ftsResults = await db.Memories
-                        .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed})")
-                        .AsNoTracking()
-                        .OrderByDescending(m => m.Created)
-                        .Take(100)
-                        .ToListAsync(cancellationToken);
+                    ftsResults = string.IsNullOrEmpty(partition)
+                        ? await db.Memories
+                            .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed})")
+                            .AsNoTracking()
+                            .OrderByDescending(m => m.Created)
+                            .Take(100)
+                            .ToListAsync(cancellationToken)
+                        : await db.Memories
+                            .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed}) AND [Partition] = {partition}")
+                            .AsNoTracking()
+                            .OrderByDescending(m => m.Created)
+                            .Take(100)
+                            .ToListAsync(cancellationToken);
                 }
                 else
                 {
-                    ftsResults = await db.Memories
-                        .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed}) AND [Status] = {(int)MemoryStatus.Active}")
-                        .AsNoTracking()
-                        .OrderByDescending(m => m.Created)
-                        .Take(100)
-                        .ToListAsync(cancellationToken);
+                    ftsResults = string.IsNullOrEmpty(partition)
+                        ? await db.Memories
+                            .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed}) AND [Status] = {(int)MemoryStatus.Active}")
+                            .AsNoTracking()
+                            .OrderByDescending(m => m.Created)
+                            .Take(100)
+                            .ToListAsync(cancellationToken)
+                        : await db.Memories
+                            .FromSqlInterpolated($"SELECT * FROM [Memories] WHERE FREETEXT([Raw], {trimmed}) AND [Status] = {(int)MemoryStatus.Active} AND [Partition] = {partition}")
+                            .AsNoTracking()
+                            .OrderByDescending(m => m.Created)
+                            .Take(100)
+                            .ToListAsync(cancellationToken);
                 }
 
                 if (ftsResults.Count > 0)
@@ -52,6 +67,7 @@ public class SearchService(MemoryDbContext db, RefIdResolver refResolver)
         var likePattern = $"%{trimmed}%";
         var likeResults = await db.Memories
             .AsNoTracking()
+            .InPartition(partition)
             .WhereActive(includeInactive)
             .Where(m => EF.Functions.Like(m.Raw, likePattern))
             .OrderByDescending(m => m.Created)
@@ -81,6 +97,7 @@ public class SearchService(MemoryDbContext db, RefIdResolver refResolver)
 
         var memories = await query
             .Select(me => me.Memory)
+            .InPartition(startupOptions.Partition)
             .Where(m => includeInactive || m.Status == MemoryStatus.Active)
             .Distinct()
             .OrderByDescending(m => m.Created)
@@ -123,6 +140,7 @@ public class SearchService(MemoryDbContext db, RefIdResolver refResolver)
             .AsNoTracking()
             .Where(mt => tokenQuery.Select(t => t.Id).Contains(mt.TokenId))
             .Select(mt => mt.Memory)
+            .InPartition(startupOptions.Partition)
             .Where(m => includeInactive || m.Status == MemoryStatus.Active)
             .Distinct()
             .OrderByDescending(m => m.Created)
@@ -161,15 +179,25 @@ public class SearchService(MemoryDbContext db, RefIdResolver refResolver)
             tokenQuery = tokenQuery.Where(t => t.DateTimeValue == dateTimeValue.Value);
 
         var tokenIds = tokenQuery.Select(t => t.Id);
+        var partition = startupOptions.Partition;
 
-        var entities = await db.MemoryEntities
+        var memoryEntities = db.MemoryEntities
             .AsNoTracking()
             .Where(me => db.MemoryTokens.Any(mt => mt.MemoryId == me.MemoryId && tokenIds.Contains(mt.TokenId)))
             .Where(me => me.Memory.Status == MemoryStatus.Active)
-            .Where(me => me.Entity.Status == EntityStatus.Active)
+            .Where(me => me.Entity.Status == EntityStatus.Active);
+
+        if (!string.IsNullOrEmpty(partition))
+            memoryEntities = memoryEntities.Where(me => me.Memory.Partition == partition);
+
+        var entities = await memoryEntities
             .Select(me => me.Entity)
             .Distinct()
-            .Select(e => ModelMappers.ToSummary(e, e.Memories.Count))
+            .Select(e => ModelMappers.ToSummary(
+                e,
+                string.IsNullOrEmpty(partition)
+                    ? e.Memories.Count
+                    : e.Memories.Count(me => me.Memory.Partition == partition)))
             .OrderBy(e => e.Name)
             .Take(100)
             .ToListAsync(cancellationToken);

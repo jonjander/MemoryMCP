@@ -12,11 +12,13 @@ public class MemoryConfiguration : IEntityTypeConfiguration<Memory>
         builder.Property(m => m.Raw).IsRequired().HasMaxLength(8000);
         builder.Property(m => m.Ref).HasMaxLength(RefIdGenerator.CharLength);
         builder.HasIndex(m => m.Ref).IsUnique().HasFilter("[Ref] IS NOT NULL");
+        builder.Property(m => m.Partition).HasMaxLength(64);
         builder.Property(m => m.Created).IsRequired();
         builder.Property(m => m.StatusNote).HasMaxLength(2000);
         builder.HasIndex(m => m.Created);
         builder.HasIndex(m => m.Status);
         builder.HasIndex(m => m.MemoryFrom);
+        builder.HasIndex(m => m.Partition);
 
         builder.HasOne(m => m.SupersedesMemory)
             .WithMany()

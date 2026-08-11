@@ -9,6 +9,9 @@ public class Memory : IHasRef
 
     public string Raw { get; set; } = string.Empty;
 
+    /// <summary>Optional isolation key (e.g. faq, privat). Null = default/unpartitioned.</summary>
+    public string? Partition { get; set; }
+
     public List<MemoryToken> Tokens { get; set; } = [];
 
     public ICollection<MemoryEntity> Entities { get; set; } = [];

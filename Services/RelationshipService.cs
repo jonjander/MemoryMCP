@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoryMCP.Services;
 
-public class RelationshipService(MemoryDbContext db)
+public class RelationshipService(MemoryDbContext db, ServerStartupOptions? startupOptions = null)
 {
     public async Task<RelationshipSummaryDto> CreateAsync(
         Guid fromEntityId,
@@ -74,7 +74,7 @@ public class RelationshipService(MemoryDbContext db)
 
     public async Task<EntityGraphDto?> GetEntityGraphAsync(Guid entityId, CancellationToken cancellationToken = default)
     {
-        var entityService = new EntityResolutionService(db);
+        var entityService = new EntityResolutionService(db, startupOptions);
         var entity = await entityService.GetEntityAsync(entityId, cancellationToken);
         if (entity is null)
             return null;

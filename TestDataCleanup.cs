@@ -19,7 +19,9 @@ public static class TestDataCleanup
         "[smoke] Batch wine B from 2001.",
         "[import-smoke] Alva likes pasta.",
         "[import-smoke] Leo likes pasta.",
-        "[smoke] Exact duplicate raw warning test."
+        "[smoke] Exact duplicate raw warning test.",
+        "[smoke] FAQ: how do I reset my password?",
+        "[smoke] I bought a dog named Bamse."
     ];
 
     private static readonly string[] SmokeEntityNames =

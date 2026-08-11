@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MemoryMCP.Services;
 
-public class RefIdResolver(MemoryDbContext db)
+public class RefIdResolver(MemoryDbContext db, ServerStartupOptions startupOptions)
 {
     public const string IdOrRefDescription =
         "Primary: short Ref id (8-char Base64) from prior responses — preferred to save context. " +
@@ -19,7 +19,11 @@ public class RefIdResolver(MemoryDbContext db)
     public async Task<Guid> ResolveMemoryIdAsync(string idOrRef, CancellationToken cancellationToken = default) =>
         await ResolveAsync(
             idOrRef,
-            () => db.Memories.AsNoTracking().Where(m => m.Ref == idOrRef).Select(m => m.Id).FirstOrDefaultAsync(cancellationToken),
+            () => db.Memories.AsNoTracking()
+                .InPartition(startupOptions.Partition)
+                .Where(m => m.Ref == idOrRef)
+                .Select(m => m.Id)
+                .FirstOrDefaultAsync(cancellationToken),
             "Memory",
             cancellationToken);
 
@@ -30,7 +34,7 @@ public class RefIdResolver(MemoryDbContext db)
             "Token",
             cancellationToken);
 
-    private static async Task<Guid> ResolveAsync(
+    private async Task<Guid> ResolveAsync(
         string idOrRef,
         Func<Task<Guid>> lookupByRef,
         string kind,
@@ -41,7 +45,18 @@ public class RefIdResolver(MemoryDbContext db)
 
         var trimmed = idOrRef.Trim();
         if (Guid.TryParse(trimmed, out var guid))
+        {
+            if (kind == "Memory" && !string.IsNullOrEmpty(startupOptions.Partition))
+            {
+                var inPartition = await db.Memories.AsNoTracking()
+                    .InPartition(startupOptions.Partition)
+                    .AnyAsync(m => m.Id == guid, cancellationToken);
+                if (!inPartition)
+                    throw new InvalidOperationException($"{kind} not found: {trimmed}");
+            }
+
             return guid;
+        }
 
         if (!RefIdGenerator.IsValidFormat(trimmed))
             throw new InvalidOperationException($"Invalid {kind.ToLowerInvariant()} id '{trimmed}'. Use Ref ({RefIdGenerator.CharLength} chars) or Guid.");

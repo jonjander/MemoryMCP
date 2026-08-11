@@ -16,24 +16,38 @@ public static class AgentGuidance
       "Retrieve: when user asks to recall or when prior knowledge helps — search_* without asking permission. " +
       "New agent: call start_here first. Never use create_memory alone for new observations.";
 
-  public static string BuildServerInstructions(string? whoAmI)
+  public static string BuildServerInstructions(string? whoAmI, string? partition = null)
   {
-    if (string.IsNullOrWhiteSpace(whoAmI))
-      return ServerInstructions;
+    var instructions = ServerInstructions;
 
-    var name = whoAmI.Trim();
-    return ServerInstructions +
-           $" User identity: when the user says \"jag\", \"I\", \"me\", \"min/mitt\", they mean {name} (Person). " +
-           $"Map first-person statements to that Person entity in store_memory_bundle — never ask who \"jag\" is.";
+    if (!string.IsNullOrWhiteSpace(whoAmI))
+    {
+      var name = whoAmI.Trim();
+      instructions +=
+          $" User identity: when the user says \"jag\", \"I\", \"me\", \"min/mitt\", they mean {name} (Person). " +
+          $"Map first-person statements to that Person entity in store_memory_bundle — never ask who \"jag\" is.";
+    }
+
+    if (!string.IsNullOrWhiteSpace(partition))
+    {
+      var key = partition.Trim();
+      instructions +=
+          $" Partition scope: this server is locked to partition \"{key}\". " +
+          $"All new memories are stored with Partition={key}. Search/list/get only see that partition — " +
+          "memories in other partitions (or null) are invisible here.";
+    }
+
+    return instructions;
   }
 
-  public static string BuildStartHere(string? whoAmI)
+  public static string BuildStartHere(string? whoAmI, string? partition = null)
   {
-    if (string.IsNullOrWhiteSpace(whoAmI))
-      return StartHere;
+    var guide = StartHere;
 
-    var name = whoAmI.Trim();
-    var whoAmISection = $"""
+    if (!string.IsNullOrWhiteSpace(whoAmI))
+    {
+      var name = whoAmI.Trim();
+      var whoAmISection = $"""
         ## Current user (whoami)
 
         When the user says **"jag"**, **"I"**, **"me"**, **"min/mitt"**, they refer to **{name}** (Person).
@@ -43,11 +57,34 @@ public static class AgentGuidance
 
         """;
 
-    const string anchor = "## Ref ids (primary — Guid still works)";
-    var index = StartHere.IndexOf(anchor, StringComparison.Ordinal);
-    return index < 0
-        ? whoAmISection + StartHere
-        : StartHere.Insert(index, whoAmISection);
+      const string anchor = "## Ref ids (primary — Guid still works)";
+      var index = guide.IndexOf(anchor, StringComparison.Ordinal);
+      guide = index < 0
+          ? whoAmISection + guide
+          : guide.Insert(index, whoAmISection);
+    }
+
+    if (!string.IsNullOrWhiteSpace(partition))
+    {
+      var key = partition.Trim();
+      var partitionSection = $"""
+        ## Partition scope
+
+        This server is configured with `--partition {key}`.
+        - **Writes**: every new memory gets `Partition={key}`.
+        - **Reads**: search/list/get only return memories in `{key}` — other partitions (e.g. privat) and null are hidden.
+        - To see all partitions, run without `--partition`.
+
+        """;
+
+      const string anchor = "## Ref ids (primary — Guid still works)";
+      var index = guide.IndexOf(anchor, StringComparison.Ordinal);
+      guide = index < 0
+          ? partitionSection + guide
+          : guide.Insert(index, partitionSection);
+    }
+
+    return guide;
   }
 
   public const string RefIdsGuide =
